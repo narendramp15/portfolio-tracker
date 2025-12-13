@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+
+{% block title %}Portfolios - Portfolio Tracker{% endblock %}
+{% block page_title %}Portfolios{% endblock %}
+
+{% block content %}
+<div class="portfolios-page">
+    <!-- Header with Create Button -->
+    <div class="flex-between mb-3">
+        <h2><i class="fas fa-briefcase"></i> Your Portfolios</h2>
+        <button class="btn btn-success" onclick="openCreateModal()">
+            <i class="fas fa-plus"></i> Create New Portfolio
+        </button>
+    </div>
+
+    <!-- Portfolios Grid -->
+    <div id="portfolios-container" class="grid grid-3">
+        <div class="flex-center" style="grid-column: 1 / -1; padding: 3rem;">
+            <div style="text-align: center;">
+                <div style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;">
+                    <i class="fas fa-briefcase"></i>
+                </div>
+                <p>Loading portfolios...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create Portfolio Modal -->
+<div id="createModal" class="modal-overlay">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 style="margin: 0;"><i class="fas fa-folder-plus"></i> Create New Portfolio</h2>
+            <button class="modal-close" onclick="closeCreateModal()">&times;</button>
+        </div>
+
+        <form onsubmit="event.preventDefault(); createPortfolio();">
+            <div class="form-group">
+                <label for="portfolio-name">Portfolio Name *</label>
+                <input type="text" id="portfolio-name" placeholder="e.g., My Growth Portfolio" required>
+            </div>
+
+            <div class="form-group">
+                <label for="portfolio-desc">Description (optional)</label>
+                <textarea id="portfolio-desc" placeholder="Add notes about this portfolio..." rows="3"></textarea>
+            </div>
+
+            <div style="display: flex; gap: 1rem;">
+                <button type="submit" class="btn btn-success" style="flex: 1;">
+                    <i class="fas fa-check"></i> Create Portfolio
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="closeCreateModal()" style="flex: 1;">
+                    Cancel
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+    .portfolio-card {
+        background: white;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: var(--shadow);
+        transition: var(--transition);
+    }
+
+    .portfolio-card:hover {
+        transform: translateY(-4px);
+        box-shadow: var(--shadow-lg);
+    }
+
+    .portfolio-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .portfolio-header h3 {
+        margin: 0;
+        font-size: 1.2rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .portfolio-icon {
+        width: 2.5rem;
+        height: 2.5rem;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+    }
+
+    .portfolio-body {
+        padding: 1.5rem;
+    }
+
+    .portfolio-desc {
+        color: #666;
+        font-size: 0.95rem;
+        margin-bottom: 1rem;
+        min-height: 2em;
+    }
+
+    .portfolio-stats {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        margin: 1rem 0;
+        padding: 1rem;
+        background: var(--light);
+        border-radius: 8px;
+    }
+
+    .stat-item {
+        text-align: center;
+    }
+
+    .stat-item label {
+        display: block;
+        font-size: 0.85rem;
+        color: #999;
+        margin-bottom: 0.25rem;
+    }
+
+    .stat-item .value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--primary);
+    }
+
+    .portfolio-footer {
+        padding: 1rem 1.5rem;
+        border-top: 1px solid var(--border);
+        display: flex;
+        gap: 0.75rem;
+    }
+
+    .portfolio-footer a,
+    .portfolio-footer button {
+        flex: 1;
+        padding: 0.6rem 0.75rem;
+        font-size: 0.9rem;
+        text-align: center;
+    }
+
+    .modal-overlay {
+        animation: fade-in 0.3s ease-in;
+    }
+
+    .modal-content {
+        animation: slide-up 0.3s ease;
+    }
+</style>
+
+<script>
+    async function loadPortfolios() {
+        try {
+            const response = await fetch('/api/portfolios/');
+            const portfolios = await response.json();
+            const container = document.getElementById('portfolios-container');
+
+            if (portfolios.length === 0) {
+                container.innerHTML = `
+                    <div style="grid-column: 1 / -1; text-align: center; padding: 3rem;">
+                        <div style="font-size: 4rem; margin-bottom: 1rem; opacity: 0.3;">
+                            <i class="fas fa-inbox"></i>
+                        </div>
+                        <p class="text-muted" style="margin-bottom: 1.5rem;">No portfolios yet. Create one to get started!</p>
+                        <button class="btn btn-success" onclick="openCreateModal()">
+                            <i class="fas fa-plus"></i> Create Your First Portfolio
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = portfolios.map(p => `
+                <div class="portfolio-card fade-in">
+                    <div class="portfolio-header">
+                        <h3>
+                            <div class="portfolio-icon">
+                                <i class="fas fa-briefcase"></i>
+                            </div>
+                            ${p.name}
+                        </h3>
+                    </div>
+                    
+                    <div class="portfolio-body">
+                        <p class="portfolio-desc">${p.description || '<em class="text-muted">No description</em>'}</p>
+                        
+                        <div class="portfolio-stats">
+                            <div class="stat-item">
+                                <label>Assets</label>
+                                <div class="value">${p.assets.length}</div>
+                            </div>
+                            <div class="stat-item">
+                                <label>Created</label>
+                                <div class="value" style="font-size: 0.9rem;">${new Date(p.created_at).toLocaleDateString()}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="portfolio-footer">
+                        <a href="/portfolios/${p.id}" class="btn" style="margin: 0;">
+                            <i class="fas fa-eye"></i> View
+                        </a>
+                        <button class="btn btn-danger" onclick="deletePortfolio(${p.id})" style="margin: 0;">
+                            <i class="fas fa-trash"></i> Delete
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        } catch (error) {
+            console.error('Error loading portfolios:', error);
+            document.getElementById('portfolios-container').innerHTML = `
+                <div class="alert alert-danger" style="grid-column: 1 / -1;">
+                    <i class="fas fa-exclamation-circle"></i> Error loading portfolios. Please try again.
+                </div>
+            `;
+        }
+    }
+
+    function openCreateModal() {
+        document.getElementById('createModal').classList.add('show');
+    }
+
+    function closeCreateModal() {
+        document.getElementById('createModal').classList.remove('show');
+        document.getElementById('portfolio-name').value = '';
+        document.getElementById('portfolio-desc').value = '';
+    }
+
+    async function createPortfolio() {
+        const name = document.getElementById('portfolio-name').value.trim();
+        const description = document.getElementById('portfolio-desc').value.trim();
+
+        if (!name) {
+            alert('Portfolio name is required');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/portfolios/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, description })
+            });
+
+            if (response.ok) {
+                closeCreateModal();
+                await loadPortfolios();
+            } else {
+                alert('Error creating portfolio');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error creating portfolio');
+        }
+    }
+
+    async function deletePortfolio(id) {
+        if (!confirm('Are you sure you want to delete this portfolio? This action cannot be undone.')) return;
+
+        try {
+            const response = await fetch(`/api/portfolios/${id}`, { method: 'DELETE' });
+            if (response.ok) {
+                await loadPortfolios();
+            } else {
+                alert('Error deleting portfolio');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error deleting portfolio');
+        }
+    }
+
+    // Close modal when clicking outside
+    document.addEventListener('click', (e) => {
+        const modal = document.getElementById('createModal');
+        if (e.target === modal) {
+            closeCreateModal();
+        }
+    });
+
+    // Load portfolios on page load
+    document.addEventListener('DOMContentLoaded', loadPortfolios);
+</script>
+{% endblock %}

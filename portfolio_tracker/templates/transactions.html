@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+
+{% block title %}Transactions - Portfolio Tracker{% endblock %}
+{% block page_title %}Transactions{% endblock %}
+
+{% block content %}
+<div class="transactions-page">
+    <!-- Header -->
+    <div class="mb-3">
+        <h2><i class="fas fa-exchange-alt"></i> Transaction History</h2>
+        <p class="text-muted">Track all your portfolio transactions</p>
+    </div>
+
+    <!-- Filters (Optional) -->
+    <div class="card mb-4">
+        <div class="card-body" style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+            <div>
+                <label for="filter-type" style="margin-right: 0.5rem;">Type:</label>
+                <select id="filter-type" style="width: 150px;">
+                    <option value="">All</option>
+                    <option value="buy">Buy</option>
+                    <option value="sell">Sell</option>
+                </select>
+            </div>
+            <div>
+                <label for="filter-date" style="margin-right: 0.5rem;">From:</label>
+                <input type="date" id="filter-date" style="width: 150px;">
+            </div>
+            <button class="btn btn-sm" onclick="loadTransactions()" style="margin-top: 1.5rem;">
+                <i class="fas fa-filter"></i> Apply Filters
+            </button>
+            <button class="btn btn-sm btn-secondary" onclick="resetFilters()" style="margin-top: 1.5rem;">
+                <i class="fas fa-redo"></i> Reset
+            </button>
+        </div>
+    </div>
+
+    <!-- Transactions Table -->
+    <div class="card">
+        <div id="transactions-container">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Asset</th>
+                        <th>Type</th>
+                        <th>Quantity</th>
+                        <th>Price per Unit</th>
+                        <th>Total Value</th>
+                        <th>Portfolio</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td colspan="7" style="text-align: center; padding: 3rem;">
+                            <div style="font-size: 2rem; opacity: 0.3; margin-bottom: 1rem;">
+                                <i class="fas fa-inbox"></i>
+                            </div>
+                            <p class="text-muted">No transactions yet</p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+    .transactions-page {
+        animation: fade-in 0.3s ease-in;
+    }
+
+    .transaction-row {
+        animation: slide-up 0.3s ease;
+    }
+
+    .badge {
+        padding: 0.35rem 0.85rem;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+
+    .badge.buy {
+        background: rgba(80, 200, 120, 0.2);
+        color: #50c878;
+    }
+
+    .badge.sell {
+        background: rgba(220, 53, 69, 0.2);
+        color: #dc3545;
+    }
+
+    .transaction-row:hover {
+        background-color: var(--light);
+    }
+
+    .no-transactions {
+        text-align: center;
+        padding: 3rem;
+    }
+
+    .stats-summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .summary-card {
+        background: white;
+        padding: 1rem;
+        border-radius: 8px;
+        border-left: 4px solid var(--primary);
+        box-shadow: var(--shadow);
+    }
+
+    .summary-card label {
+        display: block;
+        font-size: 0.85rem;
+        color: #999;
+        margin-bottom: 0.5rem;
+    }
+
+    .summary-card .value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--dark);
+    }
+</style>
+
+<script>
+    let allTransactions = [];
+
+    async function loadTransactions() {
+        try {
+            const response = await fetch('/api/transactions/');
+            allTransactions = await response.json();
+            renderTransactions(allTransactions);
+        } catch (error) {
+            console.error('Error loading transactions:', error);
+            document.getElementById('transactions-container').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle"></i> Error loading transactions. Please try again.
+                </div>
+            `;
+        }
+    }
+
+    function renderTransactions(transactions) {
+        const container = document.getElementById('transactions-container');
+
+        if (transactions.length === 0) {
+            container.innerHTML = `
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Asset</th>
+                            <th>Type</th>
+                            <th>Quantity</th>
+                            <th>Price per Unit</th>
+                            <th>Total Value</th>
+                            <th>Portfolio</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="7">
+                                <div class="no-transactions">
+                                    <div style="font-size: 3rem; opacity: 0.3; margin-bottom: 1rem;">
+                                        <i class="fas fa-inbox"></i>
+                                    </div>
+                                    <p class="text-muted">No transactions yet</p>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            `;
+            return;
+        }
+
+        const tableHTML = `
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Asset</th>
+                        <th>Type</th>
+                        <th>Quantity</th>
+                        <th>Price per Unit</th>
+                        <th>Total Value</th>
+                        <th>Portfolio</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${transactions.map(t => `
+                        <tr class="transaction-row">
+                            <td>${new Date(t.transaction_date).toLocaleDateString()}</td>
+                            <td>
+                                <strong>${t.asset_name || 'Unknown'}</strong><br>
+                                <small class="text-muted">${t.asset_symbol || ''}</small>
+                            </td>
+                            <td>
+                                <span class="badge ${t.transaction_type.toLowerCase()}">
+                                    <i class="fas fa-${t.transaction_type.toLowerCase() === 'buy' ? 'arrow-down' : 'arrow-up'}"></i>
+                                    ${t.transaction_type.charAt(0).toUpperCase() + t.transaction_type.slice(1)}
+                                </span>
+                            </td>
+                            <td>${parseFloat(t.quantity).toFixed(2)}</td>
+                            <td>$${parseFloat(t.price_per_unit).toFixed(2)}</td>
+                            <td>
+                                <strong>$${(parseFloat(t.quantity) * parseFloat(t.price_per_unit)).toFixed(2)}</strong>
+                            </td>
+                            <td>
+                                <span class="badge badge-primary">${t.portfolio_name || 'Unknown'}</span>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+
+        container.innerHTML = tableHTML;
+    }
+
+    function resetFilters() {
+        document.getElementById('filter-type').value = '';
+        document.getElementById('filter-date').value = '';
+        renderTransactions(allTransactions);
+    }
+
+    function applyFilters() {
+        let filtered = [...allTransactions];
+
+        const typeFilter = document.getElementById('filter-type').value;
+        const dateFilter = document.getElementById('filter-date').value;
+
+        if (typeFilter) {
+            filtered = filtered.filter(t => t.transaction_type.toLowerCase() === typeFilter);
+        }
+
+        if (dateFilter) {
+            filtered = filtered.filter(t => {
+                const transDate = new Date(t.transaction_date).toISOString().split('T')[0];
+                return transDate >= dateFilter;
+            });
+        }
+
+        renderTransactions(filtered);
+    }
+
+    // Make applyFilters available on filter change
+    document.addEventListener('DOMContentLoaded', () => {
+        loadTransactions();
+
+        const filterType = document.getElementById('filter-type');
+        const filterDate = document.getElementById('filter-date');
+
+        if (filterType) filterType.addEventListener('change', applyFilters);
+        if (filterDate) filterDate.addEventListener('change', applyFilters);
+    });
+</script>
+{% endblock %}

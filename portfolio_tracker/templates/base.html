@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Portfolio Tracker{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    {% block extra_css %}{% endblock %}
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1 class="sidebar-title">
+                    <i class="fas fa-chart-line"></i> PT
+                </h1>
+                <p class="sidebar-subtitle">Portfolio Tracker</p>
+            </div>
+
+            <nav class="sidebar-nav">
+                <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">
+                    <i class="fas fa-home"></i>
+                    <span>Home</span>
+                </a>
+                <a href="/portfolios" class="nav-link {% if request.url.path == '/portfolios' %}active{% endif %}">
+                    <i class="fas fa-briefcase"></i>
+                    <span>Portfolios</span>
+                </a>
+                <a href="/dashboard" class="nav-link {% if request.url.path == '/dashboard' %}active{% endif %}">
+                    <i class="fas fa-chart-pie"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="/transactions" class="nav-link {% if request.url.path == '/transactions' %}active{% endif %}">
+                    <i class="fas fa-exchange-alt"></i>
+                    <span>Transactions</span>
+                </a>
+                <a href="/broker-settings"
+                    class="nav-link {% if request.url.path == '/broker-settings' %}active{% endif %}">
+                    <i class="fas fa-link"></i>
+                    <span>Brokers</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <a href="https://github.com/yourusername/portfolio-tracker" target="_blank" class="footer-link"
+                    title="GitHub">
+                    <i class="fab fa-github"></i>
+                </a>
+                <a href="/docs" class="footer-link" title="API Docs">
+                    <i class="fas fa-book"></i>
+                </a>
+                <a href="#" class="footer-link" id="logoutBtn" title="Logout">
+                    <i class="fas fa-sign-out-alt"></i>
+                </a>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="header">
+                <div class="header-left">
+                    <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <h2 class="page-title">{% block page_title %}Dashboard{% endblock %}</h2>
+                </div>
+                <div class="header-right">
+                    <div class="search-box">
+                        <i class="fas fa-search"></i>
+                        <input type="search" placeholder="Search portfolios..." aria-label="Search">
+                    </div>
+                    <button class="btn-icon" aria-label="Notifications">
+                        <i class="fas fa-bell"></i>
+                        <span class="badge">3</span>
+                    </button>
+                    <button class="btn-icon user-menu" aria-label="User menu">
+                        <i class="fas fa-user-circle"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Content Area -->
+            <div class="content-area">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <p>&copy; 2025 Portfolio Tracker. Built with <strong>FastAPI</strong> & <strong>Python 3.13</strong></p>
+            <div class="footer-links">
+                <a href="/docs">API Docs</a>
+                <a href="https://github.com">GitHub</a>
+                <a href="#">Support</a>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <script>
+        // Check authentication on page load
+        function checkAuth() {
+            const token = localStorage.getItem('access_token');
+            const user = localStorage.getItem('user');
+
+            if (!token || !user) {
+                // Redirect to login if not authenticated
+                window.location.href = '/login';
+                return false;
+            }
+
+            // Update user menu
+            try {
+                const userData = JSON.parse(user);
+                const userMenu = document.querySelector('.user-menu');
+                if (userMenu) {
+                    userMenu.innerHTML = `
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <i class="fas fa-user-circle"></i>
+                            <span style="display: none; color: #333; font-size: 0.9rem; max-width: 100px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                ${userData.username}
+                            </span>
+                        </div>
+                    `;
+                }
+            } catch (e) {
+                console.error('Error parsing user data:', e);
+            }
+
+            return true;
+        }
+
+        // Logout function
+        function logout() {
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('user');
+            window.location.href = '/login';
+        }
+
+        // Setup logout button
+        const logoutBtn = document.getElementById('logoutBtn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (confirm('Are you sure you want to logout?')) {
+                    logout();
+                }
+            });
+        }
+
+        // Sidebar toggle for mobile
+        const sidebarToggle = document.getElementById('sidebarToggle');
+        const sidebar = document.querySelector('.sidebar');
+
+        if (sidebarToggle) {
+            sidebarToggle.addEventListener('click', () => {
+                sidebar.classList.toggle('collapsed');
+            });
+        }
+
+        // Close sidebar on mobile when clicking a link
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', () => {
+                if (window.innerWidth < 768) {
+                    sidebar.classList.add('collapsed');
+                }
+            });
+        });
+
+        // Check auth on DOMContentLoaded
+        document.addEventListener('DOMContentLoaded', checkAuth);
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+
+</html>
