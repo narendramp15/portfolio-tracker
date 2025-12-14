@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-bg: 248 250 252;
+  --color-surface: 255 255 255;
+  --color-text: 15 23 42;
+  --color-muted: 100 116 139;
+  --color-border: 226 232 240;
+
+  --color-primary: 37 99 235;
+  --color-primary-fg: 255 255 255;
+  --color-success: 22 163 74;
+  --color-success-fg: 255 255 255;
+  --color-danger: 220 38 38;
+  --color-danger-fg: 255 255 255;
+  --color-warning: 245 158 11;
+  --color-warning-fg: 17 24 39;
+
+  color-scheme: light;
+}
+
+body[data-theme='dark'] {
+  --color-bg: 15 23 42;
+  --color-surface: 17 24 39;
+  --color-text: 241 245 249;
+  --color-muted: 148 163 184;
+  --color-border: 30 41 59;
+
+  --color-primary: 96 165 250;
+  --color-primary-fg: 15 23 42;
+  --color-success: 52 211 153;
+  --color-success-fg: 15 23 42;
+  --color-danger: 248 113 113;
+  --color-danger-fg: 15 23 42;
+  --color-warning: 251 191 36;
+  --color-warning-fg: 15 23 42;
+
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: rgb(var(--color-bg));
+  color: rgb(var(--color-text));
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
+    'Apple Color Emoji', 'Segoe UI Emoji';
+}
+
+@layer base {
+  :focus-visible {
+    outline: 2px solid rgb(var(--color-primary));
+    outline-offset: 2px;
+  }
+}

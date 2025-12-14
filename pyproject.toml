@@ -43,6 +43,7 @@ dependencies = [
 dev = [
     "pytest>=8.3.0",
     "pytest-cov>=4.1.0",
+    "httpx>=0.25.0",
     "black>=24.10.0",
     "ruff>=0.7.2",
     "mypy>=1.11.0",
@@ -96,3 +97,8 @@ disallow_untyped_defs = false
 testpaths = ["tests"]
 python_files = "test_*.py"
 addopts = "--cov=portfolio_tracker --cov-report=html --cov-report=term-missing"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+]

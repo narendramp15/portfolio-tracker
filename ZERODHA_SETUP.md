@@ -17,7 +17,7 @@ Add to your `.env` file:
 ```
 ZERODHA_API_KEY=your_api_key_here
 ZERODHA_API_SECRET=your_api_secret_here
-ZERODHA_REDIRECT_URL=http://localhost:8000/api/broker/zerodha/callback
+ZERODHA_REDIRECT_URL=http://localhost:8000/app/brokers
 ```
 
 For production, update the redirect URL to match your domain.

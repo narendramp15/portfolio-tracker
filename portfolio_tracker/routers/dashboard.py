@@ -5,14 +5,18 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from portfolio_tracker.database import get_db
 from portfolio_tracker import schemas, crud
+from portfolio_tracker.deps import get_current_user
+from portfolio_tracker.models import UserModel
 
 router = APIRouter()
 
 
 @router.get("/stats", response_model=schemas.DashboardStats)
-async def get_dashboard_stats(db: Session = Depends(get_db)):
+async def get_dashboard_stats(
+    user: UserModel = Depends(get_current_user), db: Session = Depends(get_db)
+):
     """Get dashboard statistics."""
-    portfolios = crud.get_portfolios(db)
+    portfolios = crud.get_portfolios(db, user_id=user.id)
     
     total_portfolio_value = Decimal("0")
     total_invested = Decimal("0")
@@ -40,10 +44,14 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
 
 
 @router.get("/portfolio/{portfolio_id}")
-async def get_portfolio_dashboard(portfolio_id: int, db: Session = Depends(get_db)):
+async def get_portfolio_dashboard(
+    portfolio_id: int, user: UserModel = Depends(get_current_user), db: Session = Depends(get_db)
+):
     """Get dashboard data for a specific portfolio."""
     portfolio = crud.get_portfolio_by_id(db, portfolio_id)
     if not portfolio:
+        return {"error": "Portfolio not found"}
+    if portfolio.user_id != user.id:
         return {"error": "Portfolio not found"}
     
     stats = crud.get_portfolio_stats(db, portfolio_id)

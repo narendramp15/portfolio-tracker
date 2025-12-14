@@ -76,6 +76,33 @@ The application will be available at `http://localhost:8000`
 - API Docs: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 
+## Modern UI (React SPA)
+
+This project now includes a modern React + Tailwind SPA under `frontend/`.
+
+### Dev mode (recommended)
+1. Start the backend:
+```bash
+uv run uvicorn portfolio_tracker.main:app --reload
+```
+2. Start the frontend (Vite dev server):
+```bash
+cd frontend
+npm install
+npm run dev
+```
+Open `http://localhost:5173` (API requests proxy to `http://localhost:8000/api`).
+
+### Production mode (served by FastAPI)
+Build the frontend once:
+```bash
+cd frontend
+npm run build
+```
+Then run the backend normally. When `frontend/dist/index.html` exists, FastAPI serves the SPA at:
+- `http://localhost:8000/login`
+- `http://localhost:8000/app/*`
+
 ## Configuration
 
 1. Copy `.env.example` to `.env`:

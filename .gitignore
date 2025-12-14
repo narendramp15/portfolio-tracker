@@ -80,3 +80,7 @@ dmypy.json
 logs/
 data/
 temp/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/

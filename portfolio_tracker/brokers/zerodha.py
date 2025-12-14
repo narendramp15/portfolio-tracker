@@ -1,8 +1,9 @@
 """Zerodha KiteConnect broker integration."""
 
 import os
+from datetime import datetime
 from decimal import Decimal
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from kiteconnect import KiteConnect
 
@@ -35,7 +36,9 @@ class ZerodhaBroker:
         Returns:
             Login URL for user to authorize the app
         """
-        redirect_url = os.getenv("ZERODHA_REDIRECT_URL", "http://localhost:8000/api/broker/zerodha/callback")
+        redirect_url = os.getenv("ZERODHA_REDIRECT_URL", "http://localhost:8000/app/brokers")
+        if redirect_url:
+            self.kite.redirect_url = redirect_url
         return self.kite.login_url()
 
     def set_access_token(self, request_token: str, api_secret: str) -> str:
@@ -103,3 +106,18 @@ class ZerodhaBroker:
             return self.kite.profile()
         except Exception as e:
             raise ValueError(f"Failed to fetch profile: {str(e)}")
+
+    def get_trades(self) -> list[dict[str, Any]]:
+        """
+        Fetch recent trades from Zerodha account.
+
+        Returns:
+            List of trade dicts from KiteConnect.
+        """
+        try:
+            trades = self.kite.trades()
+            if not isinstance(trades, list):
+                return []
+            return trades
+        except Exception as e:
+            raise ValueError(f"Failed to fetch trades: {str(e)}")

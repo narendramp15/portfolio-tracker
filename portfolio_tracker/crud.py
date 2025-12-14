@@ -12,16 +12,19 @@ def get_portfolio_by_id(db: Session, portfolio_id: int):
     return db.query(PortfolioModel).filter(PortfolioModel.id == portfolio_id).first()
 
 
-def get_portfolios(db: Session, skip: int = 0, limit: int = 100):
+def get_portfolios(db: Session, skip: int = 0, limit: int = 100, user_id: int | None = None):
     """Get all portfolios with pagination."""
     from portfolio_tracker.models import PortfolioModel
-    return db.query(PortfolioModel).offset(skip).limit(limit).all()
+    query = db.query(PortfolioModel)
+    if user_id is not None:
+        query = query.filter(PortfolioModel.user_id == user_id)
+    return query.offset(skip).limit(limit).all()
 
 
-def create_portfolio(db: Session, name: str, description: str | None = None):
+def create_portfolio(db: Session, user_id: int, name: str, description: str | None = None):
     """Create a new portfolio."""
     from portfolio_tracker.models import PortfolioModel
-    portfolio = PortfolioModel(name=name, description=description)
+    portfolio = PortfolioModel(user_id=user_id, name=name, description=description)
     db.add(portfolio)
     db.commit()
     db.refresh(portfolio)

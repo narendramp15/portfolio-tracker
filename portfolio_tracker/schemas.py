@@ -215,3 +215,12 @@ class BrokerSyncResponse(BaseModel):
     message: str
     holdings_count: int = 0
     assets_imported: int = 0
+
+
+class BrokerTransactionsSyncResponse(BaseModel):
+    """Schema for broker transactions sync response."""
+
+    success: bool
+    message: str
+    transactions_count: int = 0
+    transactions_imported: int = 0

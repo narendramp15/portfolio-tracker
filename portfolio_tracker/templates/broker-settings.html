@@ -5,115 +5,124 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Broker Settings - Portfolio Tracker</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        .broker-container {
+            max-width: 1000px;
+            margin: 2rem auto;
+            padding: 2rem;
         }
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
+        .broker-header {
+            margin-bottom: 3rem;
         }
 
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
-        }
-
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px;
-        }
-
-        .header h1 {
-            font-size: 28px;
-            margin-bottom: 10px;
-        }
-
-        .header p {
-            opacity: 0.9;
-            font-size: 14px;
-        }
-
-        .content {
-            padding: 30px;
-        }
-
-        .section {
-            margin-bottom: 40px;
-        }
-
-        .section-title {
-            font-size: 20px;
-            font-weight: 600;
-            margin-bottom: 20px;
+        .broker-header h1 {
+            font-size: 2rem;
             color: #333;
+            margin-bottom: 0.5rem;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 1rem;
+        }
+
+        .brokers-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
         }
 
         .broker-card {
-            background: #f8f9fa;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 15px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
             transition: all 0.3s ease;
         }
 
         .broker-card:hover {
-            border-color: #667eea;
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
 
-        .broker-info {
-            flex: 1;
+        .broker-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #f0f0f0;
         }
 
         .broker-name {
-            font-size: 16px;
+            font-size: 1.3rem;
             font-weight: 600;
-            color: #333;
-            margin-bottom: 5px;
         }
 
-        .broker-details {
-            font-size: 13px;
-            color: #666;
-            line-height: 1.6;
+        .broker-icon {
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 1.5rem;
+        }
+
+        .broker-icon.angel {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .broker-icon.fivepaisa {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.95rem;
+        }
+
+        .form-hint {
+            font-size: 0.85rem;
+            color: #999;
+            margin-top: 0.25rem;
         }
 
         .broker-actions {
             display: flex;
-            gap: 10px;
-            margin-left: 20px;
+            gap: 0.75rem;
+            margin-top: 1.5rem;
         }
 
         .btn {
-            padding: 10px 16px;
+            flex: 1;
+            padding: 0.75rem 1rem;
             border: none;
             border-radius: 6px;
-            font-size: 14px;
+            font-size: 0.95rem;
             font-weight: 500;
             cursor: pointer;
             transition: all 0.3s ease;
             display: flex;
             align-items: center;
-            gap: 8px;
+            justify-content: center;
+            gap: 0.5rem;
         }
 
         .btn-primary {
@@ -126,486 +135,292 @@
             box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
         }
 
-        .btn-success {
-            background: #10b981;
-            color: white;
-        }
-
-        .btn-success:hover {
-            background: #059669;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
-        }
-
         .btn-danger {
-            background: #ef4444;
-            color: white;
+            background: #ffebee;
+            color: #c62828;
         }
 
-        .btn-danger:hover {
-            background: #dc2626;
-            transform: translateY(-2px);
-        }
-
-        .btn-secondary {
-            background: #6b7280;
-            color: white;
-        }
-
-        .btn-secondary:hover {
-            background: #4b5563;
-        }
-
-        .add-broker {
-            background: #f0f4ff;
-            border: 2px dashed #667eea;
-            border-radius: 8px;
-            padding: 30px;
-            text-align: center;
-        }
-
-        .add-broker h3 {
-            color: #333;
-            margin-bottom: 15px;
-            font-size: 16px;
-        }
-
-        .broker-list {
-            display: grid;
-            gap: 15px;
-        }
-
-        .status-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 500;
-        }
-
-        .status-connected {
-            background: #d1fae5;
-            color: #065f46;
-        }
-
-        .status-disconnected {
-            background: #fee2e2;
-            color: #991b1b;
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
 
         .alert {
-            padding: 15px 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 0.75rem;
         }
 
         .alert-success {
-            background: #d1fae5;
-            color: #065f46;
-            border: 1px solid #6ee7b7;
+            background: #e8f5e9;
+            color: #2e7d32;
         }
 
         .alert-error {
-            background: #fee2e2;
-            color: #991b1b;
-            border: 1px solid #fca5a5;
+            background: #ffebee;
+            color: #c62828;
         }
 
-        .alert-info {
-            background: #dbeafe;
-            color: #0c4a6e;
-            border: 1px solid #93c5fd;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 40px 20px;
-            color: #999;
-        }
-
-        .empty-state i {
-            font-size: 48px;
-            margin-bottom: 15px;
-            opacity: 0.5;
-        }
-
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .modal.active {
-            display: flex;
-        }
-
-        .modal-content {
-            background: white;
-            border-radius: 12px;
-            padding: 30px;
-            max-width: 500px;
-            width: 90%;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-        }
-
-        .modal-header {
-            font-size: 20px;
-            font-weight: 600;
-            margin-bottom: 20px;
-        }
-
-        .modal-body {
-            margin-bottom: 20px;
-        }
-
-        .form-group {
-            margin-bottom: 15px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-            color: #333;
-        }
-
-        .form-group select,
-        .form-group input {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
+        .connected-info {
+            background: #e8f5e9;
+            color: #2e7d32;
+            padding: 1rem;
             border-radius: 6px;
-            font-size: 14px;
+            margin-bottom: 1rem;
         }
 
-        .form-group select:focus,
-        .form-group input:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        .modal-footer {
-            display: flex;
-            gap: 10px;
-            justify-content: flex-end;
-        }
-
-        .sync-loading {
-            display: inline-block;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            to {
-                transform: rotate(360deg);
-            }
-        }
-
-        @media (max-width: 768px) {
-            .broker-card {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-
-            .broker-actions {
-                margin-left: 0;
-                margin-top: 15px;
-                width: 100%;
-            }
-
-            .broker-actions .btn {
-                flex: 1;
-                justify-content: center;
-            }
+        .sync-section {
+            background: #f5f5f5;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-top: 1rem;
         }
     </style>
 </head>
 
-<body>
-    <div class="container">
-        <div class="header">
-            <h1><i class="fas fa-link"></i> Broker Connections</h1>
-            <p>Connect your trading broker accounts to sync holdings</p>
-        </div>
+<body onload="checkAuth()">
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1 class="sidebar-title">
+                    <i class="fas fa-chart-line"></i> PT
+                </h1>
+                <p class="sidebar-subtitle">Portfolio Tracker</p>
+            </div>
 
-        <div class="content">
-            <div id="alerts-container"></div>
+            <nav class="sidebar-nav">
+                <a href="/" class="nav-link">
+                    <i class="fas fa-home"></i>
+                    <span>Home</span>
+                </a>
+                <a href="/portfolios" class="nav-link">
+                    <i class="fas fa-briefcase"></i>
+                    <span>Portfolios</span>
+                </a>
+                <a href="/dashboard" class="nav-link">
+                    <i class="fas fa-chart-pie"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="/transactions" class="nav-link">
+                    <i class="fas fa-exchange-alt"></i>
+                    <span>Transactions</span>
+                </a>
+                <a href="/broker-settings" class="nav-link active">
+                    <i class="fas fa-link"></i>
+                    <span>Brokers</span>
+                </a>
+            </nav>
 
-            <div class="section">
-                <div class="section-title">
-                    <i class="fas fa-chart-line"></i> Connected Brokers
+            <div class="sidebar-footer">
+                <button onclick="logout()" class="logout-btn">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div class="broker-container">
+                <div class="broker-header">
+                    <h1><i class="fas fa-link"></i> Broker Settings</h1>
+                    <p>Connect your broker accounts to import holdings and sync portfolio data</p>
                 </div>
-                <div id="broker-list" class="broker-list">
-                    <div class="empty-state">
-                        <i class="fas fa-inbox"></i>
-                        <p>No brokers connected yet</p>
-                        <p style="font-size: 12px; margin-top: 10px;">Connect a broker to sync your holdings</p>
+
+                <div id="alerts"></div>
+
+                <div class="brokers-grid">
+                    <!-- Zerodha Broker Card -->
+                    <div class="broker-card">
+                        <div class="broker-card-header">
+                            <div class="broker-name">Zerodha</div>
+                            <div class="broker-icon">
+                                <i class="fas fa-chart-line"></i>
+                            </div>
+                        </div>
+
+                        <div id="zerodha-form">
+                            <div class="form-group">
+                                <label for="zerodha-api-key">API Key</label>
+                                <input type="text" id="zerodha-api-key" placeholder="Enter your Zerodha API Key">
+                                <div class="form-hint">Get from <a href="https://kite.trade"
+                                        target="_blank">kite.trade</a></div>
+                            </div>
+                            <div class="form-group">
+                                <label for="zerodha-api-secret">API Secret</label>
+                                <input type="password" id="zerodha-api-secret"
+                                    placeholder="Enter your Zerodha API Secret">
+                            </div>
+                        </div>
+
+                        <div class="broker-actions">
+                            <button id="zerodha-setup" class="btn btn-primary" onclick="setupZerodha()">
+                                <i class="fas fa-plug"></i> Connect
+                            </button>
+                            <button id="zerodha-disconnect" class="btn btn-danger" onclick="disconnectBroker('zerodha')"
+                                style="display:none;">
+                                <i class="fas fa-unlink"></i> Disconnect
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Angel Broker Card -->
+                    <div class="broker-card">
+                        <div class="broker-card-header">
+                            <div class="broker-name">Angel Broking</div>
+                            <div class="broker-icon angel">
+                                <i class="fas fa-crown"></i>
+                            </div>
+                        </div>
+
+                        <div id="angel-form">
+                            <div class="form-group">
+                                <label for="angel-api-key">API Key</label>
+                                <input type="text" id="angel-api-key" placeholder="Enter your Angel API Key">
+                            </div>
+                            <div class="form-group">
+                                <label for="angel-api-secret">API Secret</label>
+                                <input type="password" id="angel-api-secret" placeholder="Enter your Angel API Secret">
+                            </div>
+                        </div>
+
+                        <div class="broker-actions">
+                            <button id="angel-setup" class="btn btn-primary" onclick="setupAngel()">
+                                <i class="fas fa-plug"></i> Connect
+                            </button>
+                            <button id="angel-disconnect" class="btn btn-danger" onclick="disconnectBroker('angel')"
+                                style="display:none;">
+                                <i class="fas fa-unlink"></i> Disconnect
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 5Paisa Broker Card -->
+                    <div class="broker-card">
+                        <div class="broker-card-header">
+                            <div class="broker-name">5Paisa</div>
+                            <div class="broker-icon fivepaisa">
+                                <i class="fas fa-rupee-sign"></i>
+                            </div>
+                        </div>
+
+                        <div id="fivepaisa-form">
+                            <div class="form-group">
+                                <label for="fivepaisa-api-key">API Key</label>
+                                <input type="text" id="fivepaisa-api-key" placeholder="Enter your 5Paisa API Key">
+                            </div>
+                            <div class="form-group">
+                                <label for="fivepaisa-api-secret">API Secret</label>
+                                <input type="password" id="fivepaisa-api-secret"
+                                    placeholder="Enter your 5Paisa API Secret">
+                            </div>
+                        </div>
+
+                        <div class="broker-actions">
+                            <button id="fivepaisa-setup" class="btn btn-primary" onclick="setupFivepaisa()">
+                                <i class="fas fa-plug"></i> Connect
+                            </button>
+                            <button id="fivepaisa-disconnect" class="btn btn-danger"
+                                onclick="disconnectBroker('fivepaisa')" style="display:none;">
+                                <i class="fas fa-unlink"></i> Disconnect
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
-
-            <div class="section">
-                <div class="section-title">
-                    <i class="fas fa-plus-circle"></i> Add New Broker
-                </div>
-                <div class="add-broker">
-                    <h3>Supported Brokers</h3>
-                    <div style="margin-bottom: 20px;">
-                        <button class="btn btn-primary" onclick="connectZerodha()">
-                            <i class="fas fa-link"></i> Connect Zerodha
-                        </button>
-                    </div>
-                    <p style="font-size: 12px; color: #666;">
-                        More brokers coming soon: Angel, 5Paisa, Upstox
-                    </p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Portfolio Selection Modal -->
-    <div id="portfolio-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">Select Portfolio</div>
-            <div class="modal-body">
-                <p style="margin-bottom: 20px; color: #666;">
-                    Which portfolio would you like to sync the holdings to?
-                </p>
-                <div id="portfolio-select-container">
-                    <div class="form-group">
-                        <label for="portfolio-select">Portfolio</label>
-                        <select id="portfolio-select">
-                            <option value="">-- Select Portfolio --</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closePortfolioModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="syncToPortfolio()">Sync Holdings</button>
-            </div>
-        </div>
+        </main>
     </div>
 
     <script>
-        let currentConfigId = null;
         const token = localStorage.getItem('access_token');
 
-        async function loadBrokers() {
+        function checkAuth() {
+            if (!token) {
+                window.location.href = '/login';
+            }
+            loadBrokerConfigs();
+        }
+
+        async function loadBrokerConfigs() {
             try {
                 const response = await fetch(`/api/broker/configs?token=${token}`);
                 const configs = await response.json();
-                displayBrokers(configs);
-            } catch (error) {
-                showAlert('Failed to load broker configurations', 'error');
-            }
-        }
-
-        function displayBrokers(configs) {
-            const brokerList = document.getElementById('broker-list');
-
-            if (configs.length === 0) {
-                brokerList.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-inbox"></i>
-                        <p>No brokers connected yet</p>
-                        <p style="font-size: 12px; margin-top: 10px;">Connect a broker to sync your holdings</p>
-                    </div>
-                `;
-                return;
-            }
-
-            brokerList.innerHTML = configs.map(config => `
-                <div class="broker-card">
-                    <div class="broker-info">
-                        <div class="broker-name">
-                            <i class="fas fa-landmark"></i> ${config.broker_name.charAt(0).toUpperCase() + config.broker_name.slice(1)}
-                        </div>
-                        <div class="broker-details">
-                            <div>User ID: <strong>${config.broker_user_id}</strong></div>
-                            <div>Status: <span class="status-badge ${config.is_active ? 'status-connected' : 'status-disconnected'}">
-                                ${config.is_active ? 'Connected' : 'Disconnected'}
-                            </span></div>
-                            <div>Last Synced: ${config.last_synced ? new Date(config.last_synced).toLocaleDateString() : 'Never'}</div>
-                        </div>
-                    </div>
-                    <div class="broker-actions">
-                        <button class="btn btn-success" onclick="showPortfolioModal(${config.id})">
-                            <i class="fas fa-sync"></i> Sync Holdings
-                        </button>
-                        <button class="btn btn-danger" onclick="deleteBroker(${config.id})">
-                            <i class="fas fa-trash"></i> Remove
-                        </button>
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        async function connectZerodha() {
-            try {
-                const response = await fetch(`/api/broker/zerodha/login-url?token=${token}`);
-                const data = await response.json();
-
-                if (data.login_url) {
-                    window.location.href = data.login_url;
-                } else {
-                    showAlert('Failed to get Zerodha login URL', 'error');
-                }
-            } catch (error) {
-                showAlert('Failed to connect Zerodha: ' + error.message, 'error');
-            }
-        }
-
-        function showPortfolioModal(configId) {
-            currentConfigId = configId;
-            loadPortfolios();
-            document.getElementById('portfolio-modal').classList.add('active');
-        }
-
-        function closePortfolioModal() {
-            document.getElementById('portfolio-modal').classList.remove('active');
-            currentConfigId = null;
-        }
-
-        async function loadPortfolios() {
-            try {
-                const response = await fetch(`/api/portfolio?token=${token}`);
-                const portfolios = await response.json();
-
-                const select = document.getElementById('portfolio-select');
-                select.innerHTML = '<option value="">-- Select Portfolio --</option>' +
-                    portfolios.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
-            } catch (error) {
-                showAlert('Failed to load portfolios', 'error');
-            }
-        }
-
-        async function syncToPortfolio() {
-            const portfolioId = document.getElementById('portfolio-select').value;
-
-            if (!portfolioId) {
-                showAlert('Please select a portfolio', 'error');
-                return;
-            }
-
-            try {
-                const button = event.target;
-                button.disabled = true;
-                button.innerHTML = '<i class="fas fa-spinner sync-loading"></i> Syncing...';
-
-                const response = await fetch(
-                    `/api/broker/zerodha/sync-holdings?portfolio_id=${portfolioId}&token=${token}`,
-                    { method: 'POST' }
-                );
-                const result = await response.json();
-
-                if (response.ok) {
-                    showAlert(`✓ ${result.message}`, 'success');
-                    closePortfolioModal();
-                    loadBrokers();
-                } else {
-                    showAlert(result.detail || 'Failed to sync holdings', 'error');
-                }
-
-                button.disabled = false;
-                button.innerHTML = '<i class="fas fa-sync"></i> Sync Holdings';
-            } catch (error) {
-                showAlert('Error: ' + error.message, 'error');
-            }
-        }
-
-        async function deleteBroker(configId) {
-            if (!confirm('Are you sure you want to remove this broker connection?')) {
-                return;
-            }
-
-            try {
-                const response = await fetch(`/api/broker/configs/${configId}?token=${token}`, {
-                    method: 'DELETE'
+                configs.forEach(config => {
+                    updateBrokerUI(config.broker_name.toLowerCase(), config);
                 });
-
-                if (response.ok) {
-                    showAlert('Broker connection removed', 'success');
-                    loadBrokers();
-                } else {
-                    showAlert('Failed to remove broker', 'error');
-                }
             } catch (error) {
-                showAlert('Error: ' + error.message, 'error');
+                showAlert('Failed to load brokers', 'error');
+            }
+        }
+
+        function updateBrokerUI(broker, config) {
+            document.getElementById(`${broker}-form`).style.display = 'none';
+            document.getElementById(`${broker}-setup`).style.display = 'none';
+            document.getElementById(`${broker}-disconnect`).style.display = 'block';
+        }
+
+        async function setupZerodha() {
+            const apiKey = document.getElementById('zerodha-api-key').value.trim();
+            const apiSecret = document.getElementById('zerodha-api-secret').value.trim();
+            if (!apiKey || !apiSecret) return showAlert('Enter both API Key and Secret', 'error');
+            setup('zerodha', apiKey, apiSecret);
+        }
+
+        async function setupAngel() {
+            const apiKey = document.getElementById('angel-api-key').value.trim();
+            const apiSecret = document.getElementById('angel-api-secret').value.trim();
+            if (!apiKey || !apiSecret) return showAlert('Enter both API Key and Secret', 'error');
+            setup('angel', apiKey, apiSecret);
+        }
+
+        async function setupFivepaisa() {
+            const apiKey = document.getElementById('fivepaisa-api-key').value.trim();
+            const apiSecret = document.getElementById('fivepaisa-api-secret').value.trim();
+            if (!apiKey || !apiSecret) return showAlert('Enter both API Key and Secret', 'error');
+            setup('fivepaisa', apiKey, apiSecret);
+        }
+
+        async function setup(broker, apiKey, apiSecret) {
+            try {
+                const url = `/api/broker/${broker}/setup?api_key=${encodeURIComponent(apiKey)}&api_secret=${encodeURIComponent(apiSecret)}&token=${token}`;
+                const response = await fetch(url, { method: 'POST' });
+                if (!response.ok) throw new Error((await response.json()).detail);
+                showAlert(`${broker} connected successfully!`, 'success');
+                setTimeout(() => loadBrokerConfigs(), 1000);
+            } catch (error) {
+                showAlert(`Setup failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function disconnectBroker(broker) {
+            if (!confirm(`Disconnect ${broker}?`)) return;
+            try {
+                const response = await fetch(`/api/broker/configs?token=${token}`);
+                const configs = await response.json();
+                const config = configs.find(c => c.broker_name.toLowerCase() === broker);
+                if (!config) return showAlert('Broker not found', 'error');
+
+                await fetch(`/api/broker/configs/${config.id}?token=${token}`, { method: 'DELETE' });
+                showAlert(`${broker} disconnected`, 'success');
+                setTimeout(() => location.reload(), 1000);
+            } catch (error) {
+                showAlert('Disconnect failed', 'error');
             }
         }
 
         function showAlert(message, type) {
-            const container = document.getElementById('alerts-container');
-            const alertId = 'alert-' + Date.now();
-
             const alert = document.createElement('div');
-            alert.id = alertId;
             alert.className = `alert alert-${type}`;
-            alert.innerHTML = `
-                <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i>
-                <span>${message}</span>
-            `;
-
-            container.appendChild(alert);
-
-            setTimeout(() => {
-                alert.remove();
-            }, 5000);
+            alert.innerHTML = `<i class="fas fa-${type === 'success' ? 'check' : 'exclamation'}-circle"></i> ${message}`;
+            document.getElementById('alerts').appendChild(alert);
+            setTimeout(() => alert.remove(), 5000);
         }
 
-        // Load brokers on page load
-        document.addEventListener('DOMContentLoaded', () => {
-            if (!token) {
-                window.location.href = '/login';
-                return;
-            }
-            loadBrokers();
-        });
-
-        // Check for callback with request token
-        const params = new URLSearchParams(window.location.search);
-        const requestToken = params.get('request_token');
-
-        if (requestToken) {
-            document.body.innerHTML = `
-                <div style="text-align: center; padding: 100px 20px;">
-                    <div style="font-size: 48px; margin-bottom: 20px;">
-                        <i class="fas fa-spinner" style="animation: spin 1s linear infinite;"></i>
-                    </div>
-                    <h2>Completing Zerodha Connection...</h2>
-                    <p>Please wait while we authenticate your account.</p>
-                </div>
-            `;
-
-            fetch(`/api/broker/zerodha/callback?request_token=${requestToken}&token=${token}`, {
-                method: 'POST'
-            })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.success) {
-                        showAlert('✓ Zerodha connected successfully!', 'success');
-                        setTimeout(() => window.location.href = '/broker-settings', 2000);
-                    } else {
-                        showAlert('Failed: ' + data.message, 'error');
-                        setTimeout(() => window.location.href = '/broker-settings', 3000);
-                    }
-                })
-                .catch(err => {
-                    showAlert('Error: ' + err.message, 'error');
-                    setTimeout(() => window.location.href = '/broker-settings', 3000);
-                });
+        function logout() {
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('user');
+            window.location.href = '/login';
         }
     </script>
 </body>
