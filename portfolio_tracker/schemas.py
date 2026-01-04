@@ -157,15 +157,39 @@ class Transaction(TransactionBase):
         from_attributes = True
 
 
+class AssetData(BaseModel):
+    """Asset data for dashboard."""
+
+    name: str
+    quantity: float
+    current_value: float
+    cost_basis: float
+    gain_loss: float
+    return_percent: float
+    portfolio_id: int
+
+
+class AllocationItem(BaseModel):
+    """Asset allocation item."""
+
+    name: str
+    value: float
+    percentage: float
+
+
 class DashboardStats(BaseModel):
     """Dashboard statistics schema."""
 
-    total_portfolio_value: Decimal
-    total_invested: Decimal
-    total_gain_loss: Decimal
-    gain_loss_percentage: Decimal
+    total_portfolio_value: float
+    total_invested: float
+    total_gain_loss: float
+    gain_loss_percentage: float
     number_of_portfolios: int
     number_of_assets: int
+    top_assets: list[AssetData] = []
+    gainers: list[AssetData] = []
+    losers: list[AssetData] = []
+    asset_allocation: list[AllocationItem] = []
 
 # Broker Configuration Schemas
 class BrokerConfigBase(BaseModel):
