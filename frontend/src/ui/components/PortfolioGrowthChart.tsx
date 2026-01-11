@@ -85,7 +85,7 @@ export function PortfolioGrowthChart({ data, isLoading }: PortfolioGrowthChartPr
                         <TrendingUp className="h-6 w-6" />
                     </div>
                     <div>
-                        <h3 className="text-lg font-black text-white">Portfolio Growth</h3>
+                        <h3 className="text-lg font-black text-text">Portfolio Growth</h3>
                         <p className="text-xs text-muted">12-month value trend vs Nifty 50</p>
                     </div>
                 </div>

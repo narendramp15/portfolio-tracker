@@ -23,7 +23,7 @@ export function KpiCard({
       border: 'border-indigo-200 dark:border-indigo-500/20',
       iconBg: 'bg-indigo-100 dark:bg-indigo-500/10',
       labelText: 'text-indigo-800/70 dark:text-zinc-400',
-      valueText: 'text-indigo-900 dark:text-white'
+      valueText: 'text-gray-900 dark:text-white'
     },
     success: {
       bg: 'bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-600/10 dark:to-teal-600/5',
@@ -31,7 +31,7 @@ export function KpiCard({
       border: 'border-emerald-200 dark:border-emerald-500/20',
       iconBg: 'bg-emerald-100 dark:bg-emerald-500/10',
       labelText: 'text-emerald-800/70 dark:text-zinc-400',
-      valueText: 'text-emerald-900 dark:text-white'
+      valueText: 'text-gray-900 dark:text-white'
     },
     danger: {
       bg: 'bg-gradient-to-br from-rose-50 to-red-50 dark:from-rose-600/10 dark:to-red-600/5',
@@ -39,7 +39,7 @@ export function KpiCard({
       border: 'border-rose-200 dark:border-rose-500/20',
       iconBg: 'bg-rose-100 dark:bg-rose-500/10',
       labelText: 'text-rose-800/70 dark:text-zinc-400',
-      valueText: 'text-rose-900 dark:text-white'
+      valueText: 'text-gray-900 dark:text-white'
     },
   }
 
