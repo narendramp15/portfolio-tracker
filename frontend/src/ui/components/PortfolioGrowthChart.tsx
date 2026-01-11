@@ -28,7 +28,7 @@ export function PortfolioGrowthChart({ data, isLoading }: PortfolioGrowthChartPr
     if (!data || data.length === 0) {
         return (
             <Card>
-                <div className="flex items-center justify-center h-[400px] text-sm text-zinc-400">
+                <div className="flex items-center justify-center h-[400px] text-sm text-muted">
                     No growth data available
                 </div>
             </Card>
@@ -48,23 +48,23 @@ export function PortfolioGrowthChart({ data, isLoading }: PortfolioGrowthChartPr
         if (active && payload && payload.length) {
             return (
                 <div className="bg-surface/95 backdrop-blur-xl border border-border rounded-lg p-3 shadow-2xl">
-                    <p className="text-xs font-semibold text-zinc-400 mb-2">{payload[0].payload.label}</p>
+                    <p className="text-xs font-semibold text-muted mb-2">{payload[0].payload.label}</p>
                     <div className="space-y-1">
                         <div className="flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2">
                                 <div className="w-2 h-2 rounded-full bg-indigo-500"></div>
-                                <span className="text-xs text-zinc-400">Portfolio</span>
+                                <span className="text-xs text-muted">Portfolio</span>
                             </div>
-                            <span className="text-sm font-black text-white">
+                            <span className="text-sm font-black text-text">
                                 {formatCurrencyINR(payload[0].value)}
                             </span>
                         </div>
                         <div className="flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2">
                                 <div className="w-2 h-2 rounded-full bg-amber-500"></div>
-                                <span className="text-xs text-zinc-400">Nifty 50</span>
+                                <span className="text-xs text-muted">Nifty 50</span>
                             </div>
-                            <span className="text-sm font-black text-amber-400">
+                            <span className="text-sm font-black text-amber-600 dark:text-amber-400">
                                 {formatCurrencyINR(payload[1]?.value || 0)}
                             </span>
                         </div>
@@ -86,17 +86,17 @@ export function PortfolioGrowthChart({ data, isLoading }: PortfolioGrowthChartPr
                     </div>
                     <div>
                         <h3 className="text-lg font-black text-white">Portfolio Growth</h3>
-                        <p className="text-xs text-zinc-400">12-month value trend vs Nifty 50</p>
+                        <p className="text-xs text-muted">12-month value trend vs Nifty 50</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full bg-indigo-500"></div>
-                        <span className="text-xs font-semibold text-zinc-300">Portfolio</span>
+                        <span className="text-xs font-semibold text-text">Portfolio</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full bg-amber-500"></div>
-                        <span className="text-xs font-semibold text-zinc-300">Nifty 50</span>
+                        <span className="text-xs font-semibold text-text">Nifty 50</span>
                     </div>
                 </div>
             </div>
@@ -119,19 +119,19 @@ export function PortfolioGrowthChart({ data, isLoading }: PortfolioGrowthChartPr
                         </defs>
                         <CartesianGrid
                             strokeDasharray="3 3"
-                            stroke="#27272a"
+                            className="stroke-border"
                             vertical={false}
                         />
                         <XAxis
                             dataKey="label"
-                            stroke="#71717a"
-                            tick={{ fill: '#71717a', fontSize: 11 }}
-                            tickLine={{ stroke: '#27272a' }}
+                            className="stroke-muted"
+                            tick={{ fill: 'currentColor', fontSize: 11, className: 'fill-muted' }}
+                            tickLine={{ className: 'stroke-border' }}
                         />
                         <YAxis
-                            stroke="#71717a"
-                            tick={{ fill: '#71717a', fontSize: 11 }}
-                            tickLine={{ stroke: '#27272a' }}
+                            className="stroke-muted"
+                            tick={{ fill: 'currentColor', fontSize: 11, className: 'fill-muted' }}
+                            tickLine={{ className: 'stroke-border' }}
                             tickFormatter={formatValue}
                         />
                         <Tooltip content={<CustomTooltip />} />

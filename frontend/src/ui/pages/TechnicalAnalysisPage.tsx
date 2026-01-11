@@ -21,7 +21,10 @@ interface TechnicalIndicators {
     middle: number;
     lower: number;
   };
-  volume_trend: string;
+  volume: {
+    trend: string;
+    average: number;
+  };
 }
 
 interface TechnicalAnalysis {
@@ -48,12 +51,12 @@ interface TechnicalAnalysis {
 // Helper functions
 const getRecommendationColor = (recommendation: string): string => {
   switch (recommendation) {
-    case 'strong_buy': return 'text-green-600 bg-green-50 border-green-200';
-    case 'buy': return 'text-green-600 bg-green-50 border-green-200';
-    case 'hold': return 'text-yellow-600 bg-yellow-50 border-yellow-200';
-    case 'sell': return 'text-red-600 bg-red-50 border-red-200';
-    case 'strong_sell': return 'text-red-600 bg-red-50 border-red-200';
-    default: return 'text-gray-600 bg-gray-50 border-gray-200';
+    case 'strong_buy': return 'text-green-600 bg-green-50 border-green-200 dark:text-green-400 dark:bg-green-950/20 dark:border-green-800';
+    case 'buy': return 'text-green-600 bg-green-50 border-green-200 dark:text-green-400 dark:bg-green-950/20 dark:border-green-800';
+    case 'hold': return 'text-yellow-600 bg-yellow-50 border-yellow-200 dark:text-yellow-400 dark:bg-yellow-950/20 dark:border-yellow-800';
+    case 'sell': return 'text-red-600 bg-red-50 border-red-200 dark:text-red-400 dark:bg-red-950/20 dark:border-red-800';
+    case 'strong_sell': return 'text-red-600 bg-red-50 border-red-200 dark:text-red-400 dark:bg-red-950/20 dark:border-red-800';
+    default: return 'text-muted bg-border/20 border-border';
   }
 };
 
@@ -87,13 +90,13 @@ const RSIIndicator = ({ value }: { value: number }) => {
   return (
     <div className="space-y-1">
       <div className="flex justify-between text-xs">
-        <span className="text-gray-600">RSI: {value.toFixed(1)}</span>
+        <span className="text-muted">RSI: {value.toFixed(1)}</span>
         <span className={`font-medium ${value < 30 ? 'text-green-600' : value > 70 ? 'text-red-600' : 'text-yellow-600'
           }`}>
           {getLabel()}
         </span>
       </div>
-      <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+      <div className="h-2 bg-border rounded-full overflow-hidden">
         <div
           className={`h-full ${getColor()} transition-all duration-300`}
           style={{ width: `${value}%` }}
@@ -117,7 +120,7 @@ export default function TechnicalAnalysisPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-gray-600">Loading technical analysis...</div>
+        <div className="text-muted">Loading technical analysis...</div>
       </div>
     );
   }
@@ -125,7 +128,7 @@ export default function TechnicalAnalysisPage() {
   if (!analyses || analyses.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-gray-600">No holdings found for analysis</div>
+        <div className="text-muted">No holdings found for analysis</div>
       </div>
     );
   }
@@ -135,10 +138,10 @@ export default function TechnicalAnalysisPage() {
       {/* Header with Toggle */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 via-purple-300 to-indigo-500 bg-clip-text text-transparent">
             Technical Analysis & AI Recommendations
           </h1>
-          <p className="text-gray-600 mt-1">
+          <p className="text-muted mt-1">
             AI-powered technical analysis with buy/sell signals
           </p>
         </div>
@@ -148,8 +151,8 @@ export default function TechnicalAnalysisPage() {
           <button
             onClick={() => setViewMode('table')}
             className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${viewMode === 'table'
-                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md'
-                : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+              ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md'
+              : 'bg-surface text-text hover:bg-surface/80 border border-border'
               }`}
           >
             <LayoutList className="w-4 h-4" />
@@ -158,8 +161,8 @@ export default function TechnicalAnalysisPage() {
           <button
             onClick={() => setViewMode('cards')}
             className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${viewMode === 'cards'
-                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md'
-                : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+              ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md'
+              : 'bg-surface text-text hover:bg-surface/80 border border-border'
               }`}
           >
             <LayoutGrid className="w-4 h-4" />
@@ -171,45 +174,45 @@ export default function TechnicalAnalysisPage() {
       {/* Conditional View Rendering */}
       {viewMode === 'table' ? (
         /* Table View */
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-surface rounded-xl shadow-sm border border-border overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-gray-200">
+              <thead className="bg-gradient-to-r from-indigo-50/50 to-purple-50/50 dark:from-indigo-950/30 dark:to-purple-950/30 border-b border-border">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-text uppercase tracking-wider">
                     Asset
                   </th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-right text-xs font-semibold text-text uppercase tracking-wider">
                     Price
                   </th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-right text-xs font-semibold text-text uppercase tracking-wider">
                     P&L
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-text uppercase tracking-wider">
                     RSI
                   </th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-right text-xs font-semibold text-text uppercase tracking-wider">
                     MACD
                   </th>
-                  <th className="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  <th className="px-6 py-4 text-center text-xs font-semibold text-text uppercase tracking-wider">
                     AI Recommendation
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-border">
                 {analyses.map((analysis) => (
-                  <tr key={analysis.asset_id} className="hover:bg-gray-50 transition-colors">
+                  <tr key={analysis.asset_id} className="hover:bg-surface/80 transition-colors">
                     <td className="px-6 py-4">
                       <div>
-                        <div className="font-semibold text-gray-900">{analysis.symbol}</div>
-                        <div className="text-sm text-gray-600">{analysis.name}</div>
+                        <div className="font-semibold text-text">{analysis.symbol}</div>
+                        <div className="text-sm text-muted">{analysis.name}</div>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="font-medium text-gray-900">
+                      <div className="font-medium text-text">
                         ₹{(analysis.current_price ?? 0).toFixed(2)}
                       </div>
-                      <div className="text-sm text-gray-600">
+                      <div className="text-sm text-muted">
                         Qty: {analysis.quantity ?? 0}
                       </div>
                     </td>
@@ -230,12 +233,12 @@ export default function TechnicalAnalysisPage() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className={`font-medium ${(analysis.indicators?.macd?.histogram ?? 0) > 0
-                          ? 'text-green-600'
-                          : 'text-red-600'
+                        ? 'text-green-600'
+                        : 'text-red-600'
                         }`}>
                         {(analysis.indicators?.macd?.value ?? 0).toFixed(2)}
                       </div>
-                      <div className="text-xs text-gray-600">
+                      <div className="text-xs text-muted">
                         Signal: {(analysis.indicators?.macd?.signal ?? 0).toFixed(2)}
                       </div>
                     </td>
@@ -246,7 +249,7 @@ export default function TechnicalAnalysisPage() {
                           {getRecommendationIcon(analysis.recommendation ?? 'hold')}
                           {(analysis.recommendation ?? 'hold').replace('_', ' ').toUpperCase()}
                         </span>
-                        <span className="text-xs text-gray-600">
+                        <span className="text-xs text-muted">
                           {(analysis.confidence ?? 0).toFixed(0)}% confidence
                         </span>
                       </div>
@@ -263,7 +266,7 @@ export default function TechnicalAnalysisPage() {
           {analyses.map((analysis) => (
             <div
               key={analysis.asset_id}
-              className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
+              className="bg-surface rounded-xl shadow-sm border border-border overflow-hidden hover:shadow-md transition-shadow"
             >
               {/* Asset Header */}
               <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4 text-white">
@@ -275,14 +278,14 @@ export default function TechnicalAnalysisPage() {
                 {/* Price & P&L */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <div className="text-xs text-gray-600 mb-1">Current Price</div>
-                    <div className="text-lg font-bold text-gray-900">
+                    <div className="text-xs text-muted mb-1">Current Price</div>
+                    <div className="text-lg font-bold text-text">
                       ₹{(analysis.current_price ?? 0).toFixed(2)}
                     </div>
-                    <div className="text-xs text-gray-600">Qty: {analysis.quantity ?? 0}</div>
+                    <div className="text-xs text-muted">Qty: {analysis.quantity ?? 0}</div>
                   </div>
                   <div>
-                    <div className="text-xs text-gray-600 mb-1">P&L</div>
+                    <div className="text-xs text-muted mb-1">P&L</div>
                     <div className={`text-lg font-bold ${(analysis.gain_loss ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
                       }`}>
                       {(analysis.gain_loss ?? 0) >= 0 ? '+' : ''}₹{(analysis.gain_loss ?? 0).toFixed(2)}
@@ -296,7 +299,7 @@ export default function TechnicalAnalysisPage() {
 
                 {/* Technical Indicators */}
                 <div className="space-y-3">
-                  <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                  <h4 className="text-sm font-semibold text-text flex items-center gap-2">
                     <Activity className="w-4 h-4" />
                     Technical Indicators
                   </h4>
@@ -305,29 +308,29 @@ export default function TechnicalAnalysisPage() {
                   <RSIIndicator value={analysis.indicators?.rsi ?? 50} />
 
                   {/* MACD */}
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <div className="text-xs text-gray-600 mb-1">MACD</div>
+                  <div className="bg-border/30 rounded-lg p-3">
+                    <div className="text-xs text-muted mb-1">MACD</div>
                     <div className="grid grid-cols-3 gap-2 text-center">
                       <div>
-                        <div className="text-xs text-gray-500">Value</div>
+                        <div className="text-xs text-muted">Value</div>
                         <div className={`text-sm font-semibold ${(analysis.indicators?.macd?.value ?? 0) > 0
-                            ? 'text-green-600'
-                            : 'text-red-600'
+                          ? 'text-green-600'
+                          : 'text-red-600'
                           }`}>
                           {(analysis.indicators?.macd?.value ?? 0).toFixed(2)}
                         </div>
                       </div>
                       <div>
-                        <div className="text-xs text-gray-500">Signal</div>
-                        <div className="text-sm font-semibold text-gray-900">
+                        <div className="text-xs text-muted">Signal</div>
+                        <div className="text-sm font-semibold text-text">
                           {(analysis.indicators?.macd?.signal ?? 0).toFixed(2)}
                         </div>
                       </div>
                       <div>
-                        <div className="text-xs text-gray-500">Histogram</div>
+                        <div className="text-xs text-muted">Histogram</div>
                         <div className={`text-sm font-semibold ${(analysis.indicators?.macd?.histogram ?? 0) > 0
-                            ? 'text-green-600'
-                            : 'text-red-600'
+                          ? 'text-green-600'
+                          : 'text-red-600'
                           }`}>
                           {(analysis.indicators?.macd?.histogram ?? 0).toFixed(2)}
                         </div>
@@ -336,24 +339,24 @@ export default function TechnicalAnalysisPage() {
                   </div>
 
                   {/* Moving Averages */}
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <div className="text-xs text-gray-600 mb-2">Moving Averages</div>
+                  <div className="bg-border/30 rounded-lg p-3">
+                    <div className="text-xs text-muted mb-2">Moving Averages</div>
                     <div className="space-y-1">
                       <div className="flex justify-between text-xs">
-                        <span className="text-gray-600">SMA 20:</span>
-                        <span className="font-semibold text-gray-900">
+                        <span className="text-muted">SMA 20:</span>
+                        <span className="font-semibold text-text">
                           ₹{(analysis.indicators?.moving_averages?.sma_20 ?? 0).toFixed(2)}
                         </span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span className="text-gray-600">SMA 50:</span>
-                        <span className="font-semibold text-gray-900">
+                        <span className="text-muted">SMA 50:</span>
+                        <span className="font-semibold text-text">
                           ₹{(analysis.indicators?.moving_averages?.sma_50 ?? 0).toFixed(2)}
                         </span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span className="text-gray-600">SMA 200:</span>
-                        <span className="font-semibold text-gray-900">
+                        <span className="text-muted">SMA 200:</span>
+                        <span className="font-semibold text-text">
                           ₹{(analysis.indicators?.moving_averages?.sma_200 ?? 0).toFixed(2)}
                         </span>
                       </div>
@@ -361,24 +364,24 @@ export default function TechnicalAnalysisPage() {
                   </div>
 
                   {/* Bollinger Bands */}
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <div className="text-xs text-gray-600 mb-2">Bollinger Bands</div>
+                  <div className="bg-border/30 rounded-lg p-3">
+                    <div className="text-xs text-muted mb-2">Bollinger Bands</div>
                     <div className="space-y-1">
                       <div className="flex justify-between text-xs">
-                        <span className="text-gray-600">Upper:</span>
-                        <span className="font-semibold text-gray-900">
+                        <span className="text-muted">Upper:</span>
+                        <span className="font-semibold text-text">
                           ₹{(analysis.indicators?.bollinger_bands?.upper ?? 0).toFixed(2)}
                         </span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span className="text-gray-600">Middle:</span>
-                        <span className="font-semibold text-gray-900">
+                        <span className="text-muted">Middle:</span>
+                        <span className="font-semibold text-text">
                           ₹{(analysis.indicators?.bollinger_bands?.middle ?? 0).toFixed(2)}
                         </span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span className="text-gray-600">Lower:</span>
-                        <span className="font-semibold text-gray-900">
+                        <span className="text-muted">Lower:</span>
+                        <span className="font-semibold text-text">
                           ₹{(analysis.indicators?.bollinger_bands?.lower ?? 0).toFixed(2)}
                         </span>
                       </div>
@@ -386,13 +389,13 @@ export default function TechnicalAnalysisPage() {
                   </div>
 
                   {/* Volume Trend */}
-                  <div className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
-                    <span className="text-xs text-gray-600">Volume Trend</span>
+                  <div className="flex items-center justify-between bg-border/30 rounded-lg p-3">
+                    <span className="text-xs text-muted">Volume Trend</span>
                     <span className={`text-xs font-semibold px-2 py-1 rounded ${(analysis.indicators?.volume?.trend ?? 'stable') === 'increasing'
-                        ? 'bg-green-100 text-green-700'
-                        : (analysis.indicators?.volume?.trend ?? 'stable') === 'decreasing'
-                          ? 'bg-red-100 text-red-700'
-                          : 'bg-yellow-100 text-yellow-700'
+                      ? 'bg-green-100 text-green-700'
+                      : (analysis.indicators?.volume?.trend ?? 'stable') === 'decreasing'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-yellow-100 text-yellow-700'
                       }`}>
                       {analysis.indicators?.volume?.trend ?? 'stable'}
                     </span>
@@ -400,8 +403,8 @@ export default function TechnicalAnalysisPage() {
                 </div>
 
                 {/* AI Signals */}
-                <div className="space-y-3 pt-3 border-t border-gray-200">
-                  <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <div className="space-y-3 pt-3 border-t border-border">
+                  <h4 className="text-sm font-semibold text-text flex items-center gap-2">
                     <TrendingUp className="w-4 h-4" />
                     AI Recommendation
                   </h4>
@@ -413,36 +416,36 @@ export default function TechnicalAnalysisPage() {
                       {getRecommendationIcon(analysis.recommendation ?? 'hold')}
                       {(analysis.recommendation ?? 'hold').replace('_', ' ').toUpperCase()}
                     </span>
-                    <div className="text-xs text-gray-600 mt-2">
+                    <div className="text-xs text-muted mt-2">
                       Confidence: {(analysis.confidence ?? 0).toFixed(0)}%
                     </div>
                   </div>
 
                   {/* Bullish vs Bearish */}
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-green-50 rounded-lg p-3 text-center border border-green-200">
-                      <TrendingUp className="w-5 h-5 text-green-600 mx-auto mb-1" />
-                      <div className="text-xs text-gray-600">Bullish Factors</div>
-                      <div className="text-lg font-bold text-green-600">
+                    <div className="bg-green-50 dark:bg-green-950/20 rounded-lg p-3 text-center border border-green-200 dark:border-green-800">
+                      <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400 mx-auto mb-1" />
+                      <div className="text-xs text-muted">Bullish Factors</div>
+                      <div className="text-lg font-bold text-green-600 dark:text-green-400">
                         {analysis.bullish_factors ?? 0}
                       </div>
                     </div>
-                    <div className="bg-red-50 rounded-lg p-3 text-center border border-red-200">
-                      <TrendingDown className="w-5 h-5 text-red-600 mx-auto mb-1" />
-                      <div className="text-xs text-gray-600">Bearish Factors</div>
-                      <div className="text-lg font-bold text-red-600">
+                    <div className="bg-red-50 dark:bg-red-950/20 rounded-lg p-3 text-center border border-red-200 dark:border-red-800">
+                      <TrendingDown className="w-5 h-5 text-red-600 dark:text-red-400 mx-auto mb-1" />
+                      <div className="text-xs text-muted">Bearish Factors</div>
+                      <div className="text-lg font-bold text-red-600 dark:text-red-400">
                         {analysis.bearish_factors ?? 0}
                       </div>
                     </div>
                   </div>
 
                   {/* Reasoning */}
-                  <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-200">
-                    <div className="text-xs font-semibold text-indigo-900 mb-2">Key Insights</div>
+                  <div className="bg-indigo-50 dark:bg-indigo-950/20 rounded-lg p-3 border border-indigo-200 dark:border-indigo-800">
+                    <div className="text-xs font-semibold text-indigo-900 dark:text-indigo-300 mb-2">Key Insights</div>
                     <ul className="space-y-1">
                       {(analysis.signals ?? []).map((signal, idx) => (
-                        <li key={idx} className="text-xs text-indigo-700 flex items-start gap-1">
-                          <span className="text-indigo-400 mt-0.5">•</span>
+                        <li key={idx} className="text-xs text-indigo-700 dark:text-indigo-300 flex items-start gap-1">
+                          <span className="text-indigo-400 dark:text-indigo-500 mt-0.5">•</span>
                           <span>{signal}</span>
                         </li>
                       ))}

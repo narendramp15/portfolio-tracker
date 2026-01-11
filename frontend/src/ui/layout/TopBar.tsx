@@ -23,12 +23,12 @@ export function TopBar() {
   })
 
   return (
-    <header className="sticky top-0 z-20 border-b border-zinc-800/50 bg-zinc-900/80 backdrop-blur-xl shadow-lg">
+    <header className="sticky top-0 z-20 border-b border-border bg-surface/80 backdrop-blur-xl shadow-lg">
       <div className="flex items-center justify-between gap-4 px-6 py-4">
         <div className="relative hidden w-full max-w-md sm:block">
-          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
           <input
-            className="w-full rounded-xl border border-zinc-800/80 bg-zinc-950/50 px-10 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 outline-none transition-all focus:border-indigo-500/50 focus:bg-zinc-900/50 focus:ring-2 focus:ring-indigo-500/20"
+            className="w-full rounded-xl border border-border bg-bg px-10 py-2.5 text-sm text-text placeholder-muted outline-none transition-all focus:border-indigo-500/50 focus:bg-surface focus:ring-2 focus:ring-indigo-500/20"
             placeholder="Search symbols, portfolios..."
             type="search"
           />
@@ -36,7 +36,7 @@ export function TopBar() {
 
         <div className="flex items-center gap-3">
           <select
-            className="hidden rounded-xl border border-zinc-800/80 bg-zinc-950/50 px-4 py-2.5 text-sm font-medium text-zinc-200 transition-all hover:border-indigo-500/50 focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 sm:block"
+            className="hidden rounded-xl border border-border bg-bg px-4 py-2.5 text-sm font-medium text-text transition-all hover:border-indigo-500/50 focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 sm:block"
             value={selectedPortfolioId ?? ''}
             onChange={(e) => setSelectedPortfolioId(e.target.value ? Number(e.target.value) : null)}
             title="Selected portfolio (used for broker sync)"

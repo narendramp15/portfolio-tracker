@@ -56,17 +56,17 @@ async function fetchAssetAnalysis(assetId: string) {
 function getRecommendationColor(recommendation: string) {
     switch (recommendation) {
         case 'strong_buy':
-            return 'from-emerald-600/50 to-green-600/50'
+            return 'from-emerald-600/50 to-green-600/50 dark:from-emerald-600/50 dark:to-green-600/50'
         case 'buy':
-            return 'from-emerald-600/30 to-green-600/30'
+            return 'from-emerald-600/30 to-green-600/30 dark:from-emerald-600/30 dark:to-green-600/30'
         case 'hold':
-            return 'from-zinc-600/30 to-zinc-700/30'
+            return 'from-border/30 to-border/30 dark:from-zinc-600/30 dark:to-zinc-700/30'
         case 'sell':
-            return 'from-rose-600/30 to-red-600/30'
+            return 'from-rose-600/30 to-red-600/30 dark:from-rose-600/30 dark:to-red-600/30'
         case 'strong_sell':
-            return 'from-rose-600/50 to-red-600/50'
+            return 'from-rose-600/50 to-red-600/50 dark:from-rose-600/50 dark:to-red-600/50'
         default:
-            return 'from-zinc-600/30 to-zinc-700/30'
+            return 'from-border/30 to-border/30 dark:from-zinc-600/30 dark:to-zinc-700/30'
     }
 }
 
@@ -79,28 +79,28 @@ function getRecommendationIcon(recommendation: string) {
         case 'sell':
             return <TrendingDown className="h-5 w-5 text-rose-400" />
         default:
-            return <Activity className="h-5 w-5 text-zinc-400" />
+            return <Activity className="h-5 w-5 text-muted" />
     }
 }
 
 function RSIIndicator({ value }: { value: number }) {
     const isOversold = value < 30
     const isOverbought = value > 70
-    const color = isOversold ? 'text-emerald-400' : isOverbought ? 'text-rose-400' : 'text-zinc-400'
+    const color = isOversold ? 'text-emerald-400' : isOverbought ? 'text-rose-400' : 'text-muted'
 
     return (
         <div className="space-y-2">
             <div className="flex items-center justify-between text-xs">
-                <span className="text-zinc-400">RSI</span>
+                <span className="text-muted">RSI</span>
                 <span className={`font-bold ${color}`}>{value.toFixed(1)}</span>
             </div>
-            <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+            <div className="h-2 bg-border rounded-full overflow-hidden">
                 <div
                     className={`h-full transition-all ${isOversold ? 'bg-emerald-500' : isOverbought ? 'bg-rose-500' : 'bg-indigo-500'}`}
                     style={{ width: `${value}%` }}
                 />
             </div>
-            <div className="flex justify-between text-[10px] text-zinc-500">
+            <div className="flex justify-between text-[10px] text-muted">
                 <span>Oversold</span>
                 <span>Neutral</span>
                 <span>Overbought</span>
@@ -144,7 +144,7 @@ export function TechnicalAnalysisDetailPage() {
                 <div className="flex items-center gap-4">
                     <button
                         onClick={() => navigate('/app/analysis')}
-                        className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-800/50 text-zinc-400 hover:bg-zinc-700/50 hover:text-white transition-all border border-zinc-700/50 hover:border-zinc-600/50"
+                        className="flex h-10 w-10 items-center justify-center rounded-xl bg-border/50 text-muted hover:bg-border hover:text-text transition-all border border-border"
                     >
                         <ArrowLeft className="h-5 w-5" />
                     </button>
@@ -171,26 +171,26 @@ export function TechnicalAnalysisDetailPage() {
                                     {isPositive ? '+' : ''}{item.gain_loss_percentage.toFixed(2)}%
                                 </span>
                             </div>
-                            <p className="text-sm text-zinc-400 truncate">{item.name}</p>
-                            <p className="text-xs text-zinc-500 mt-1">{item.portfolio_name}</p>
+                            <p className="text-sm text-muted truncate">{item.name}</p>
+                            <p className="text-xs text-muted mt-1">{item.portfolio_name}</p>
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
                             <div>
-                                <div className="text-xs text-zinc-400">Current Price</div>
+                                <div className="text-xs text-muted">Current Price</div>
                                 <div className="text-base font-black text-white">{formatCurrencyINR(item.current_price)}</div>
                             </div>
                             <div>
-                                <div className="text-xs text-zinc-400">Quantity</div>
+                                <div className="text-xs text-muted">Quantity</div>
                                 <div className="text-base font-black text-white">{item.quantity}</div>
                             </div>
                             <div>
-                                <div className="text-xs text-zinc-400">Invested</div>
-                                <div className="text-sm font-bold text-zinc-300">{formatCurrencyINR(item.invested_value)}</div>
+                                <div className="text-xs text-muted">Invested</div>
+                                <div className="text-sm font-bold text-white">{formatCurrencyINR(item.invested_value)}</div>
                             </div>
                             <div>
-                                <div className="text-xs text-zinc-400">Current Value</div>
-                                <div className="text-sm font-bold text-zinc-300">{formatCurrencyINR(item.current_value)}</div>
+                                <div className="text-xs text-muted">Current Value</div>
+                                <div className="text-sm font-bold text-white">{formatCurrencyINR(item.current_value)}</div>
                             </div>
                         </div>
 
@@ -212,18 +212,18 @@ export function TechnicalAnalysisDetailPage() {
                         <div className="flex items-center gap-4">
                             <div className="flex items-center gap-2">
                                 <ArrowUpRight className="h-4 w-4 text-emerald-400" />
-                                <span className="text-xs text-zinc-400">Bullish: <span className="font-bold text-emerald-400">{item.bullish_factors}</span></span>
+                                <span className="text-xs text-muted">Bullish: <span className="font-bold text-emerald-400">{item.bullish_factors}</span></span>
                             </div>
                             <div className="flex items-center gap-2">
                                 <ArrowDownRight className="h-4 w-4 text-rose-400" />
-                                <span className="text-xs text-zinc-400">Bearish: <span className="font-bold text-rose-400">{item.bearish_factors}</span></span>
+                                <span className="text-xs text-muted">Bearish: <span className="font-bold text-rose-400">{item.bearish_factors}</span></span>
                             </div>
                         </div>
                     </div>
 
                     {/* Middle Column - Technical Indicators */}
                     <div className="space-y-4">
-                        <h4 className="text-xs font-bold uppercase tracking-widest text-zinc-400 flex items-center gap-2">
+                        <h4 className="text-xs font-bold uppercase tracking-widest text-muted flex items-center gap-2">
                             <Target className="h-3 w-3" />
                             Technical Indicators
                         </h4>
@@ -231,18 +231,18 @@ export function TechnicalAnalysisDetailPage() {
                         <RSIIndicator value={item.indicators.rsi} />
 
                         <div className="space-y-2">
-                            <div className="text-xs font-semibold text-zinc-400">MACD</div>
+                            <div className="text-xs font-semibold text-muted">MACD</div>
                             <div className="grid grid-cols-3 gap-2 text-xs">
                                 <div>
-                                    <div className="text-zinc-500">Value</div>
-                                    <div className="font-bold text-white">{item.indicators.macd.value.toFixed(2)}</div>
+                                    <div className="text-muted">Value</div>
+                                    <div className="font-bold text-text">{item.indicators.macd.value.toFixed(2)}</div>
                                 </div>
                                 <div>
-                                    <div className="text-zinc-500">Signal</div>
-                                    <div className="font-bold text-white">{item.indicators.macd.signal.toFixed(2)}</div>
+                                    <div className="text-muted">Signal</div>
+                                    <div className="font-bold text-text">{item.indicators.macd.signal.toFixed(2)}</div>
                                 </div>
                                 <div>
-                                    <div className="text-zinc-500">Histogram</div>
+                                    <div className="text-muted">Histogram</div>
                                     <div className={`font-bold ${item.indicators.macd.histogram > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                         {item.indicators.macd.histogram.toFixed(2)}
                                     </div>
@@ -251,37 +251,37 @@ export function TechnicalAnalysisDetailPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <div className="text-xs font-semibold text-zinc-400">Moving Averages</div>
+                            <div className="text-xs font-semibold text-muted">Moving Averages</div>
                             <div className="space-y-1.5">
                                 <div className="flex items-center justify-between text-xs">
-                                    <span className="text-zinc-500">SMA 20</span>
-                                    <span className="font-bold text-white">{formatCurrencyINR(item.indicators.moving_averages.sma_20)}</span>
+                                    <span className="text-muted">SMA 20</span>
+                                    <span className="font-bold text-text">{formatCurrencyINR(item.indicators.moving_averages.sma_20)}</span>
                                 </div>
                                 <div className="flex items-center justify-between text-xs">
-                                    <span className="text-zinc-500">SMA 50</span>
-                                    <span className="font-bold text-white">{formatCurrencyINR(item.indicators.moving_averages.sma_50)}</span>
+                                    <span className="text-muted">SMA 50</span>
+                                    <span className="font-bold text-text">{formatCurrencyINR(item.indicators.moving_averages.sma_50)}</span>
                                 </div>
                                 <div className="flex items-center justify-between text-xs">
-                                    <span className="text-zinc-500">SMA 200</span>
-                                    <span className="font-bold text-white">{formatCurrencyINR(item.indicators.moving_averages.sma_200)}</span>
+                                    <span className="text-muted">SMA 200</span>
+                                    <span className="font-bold text-text">{formatCurrencyINR(item.indicators.moving_averages.sma_200)}</span>
                                 </div>
                             </div>
                         </div>
 
                         <div className="space-y-2">
-                            <div className="text-xs font-semibold text-zinc-400">Bollinger Bands</div>
+                            <div className="text-xs font-semibold text-muted">Bollinger Bands</div>
                             <div className="space-y-1.5">
                                 <div className="flex items-center justify-between text-xs">
-                                    <span className="text-zinc-500">Upper</span>
-                                    <span className="font-bold text-white">{formatCurrencyINR(item.indicators.bollinger_bands.upper)}</span>
+                                    <span className="text-muted">Upper</span>
+                                    <span className="font-bold text-text">{formatCurrencyINR(item.indicators.bollinger_bands.upper)}</span>
                                 </div>
                                 <div className="flex items-center justify-between text-xs">
-                                    <span className="text-zinc-500">Middle</span>
+                                    <span className="text-muted">Middle</span>
                                     <span className="font-bold text-indigo-400">{formatCurrencyINR(item.indicators.bollinger_bands.middle)}</span>
                                 </div>
                                 <div className="flex items-center justify-between text-xs">
-                                    <span className="text-zinc-500">Lower</span>
-                                    <span className="font-bold text-white">{formatCurrencyINR(item.indicators.bollinger_bands.lower)}</span>
+                                    <span className="text-muted">Lower</span>
+                                    <span className="font-bold text-text">{formatCurrencyINR(item.indicators.bollinger_bands.lower)}</span>
                                 </div>
                             </div>
                         </div>
@@ -289,16 +289,16 @@ export function TechnicalAnalysisDetailPage() {
 
                     {/* Right Column - AI Signals */}
                     <div className="space-y-4">
-                        <h4 className="text-xs font-bold uppercase tracking-widest text-zinc-400 flex items-center gap-2">
+                        <h4 className="text-xs font-bold uppercase tracking-widest text-muted flex items-center gap-2">
                             <Zap className="h-3 w-3" />
                             AI Analysis Signals
                         </h4>
 
                         <div className="space-y-2">
                             {item.signals.map((signal, idx) => (
-                                <div key={idx} className="flex items-start gap-2 p-3 rounded-lg bg-zinc-800/50 border border-zinc-700/50">
+                                <div key={idx} className="flex items-start gap-2 p-3 rounded-lg bg-indigo-50 dark:bg-surface border border-border">
                                     <CheckCircle className="h-4 w-4 text-indigo-400 flex-shrink-0 mt-0.5" />
-                                    <p className="text-xs text-zinc-300 leading-relaxed">{signal}</p>
+                                    <p className="text-xs text-indigo-900 dark:text-text leading-relaxed">{signal}</p>
                                 </div>
                             ))}
                         </div>
