@@ -10,8 +10,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from portfolio_tracker.database import create_tables
-from portfolio_tracker.routers import (auth, broker, dashboard, portfolio,
-                                       transactions)
+from portfolio_tracker.routers import (analysis, auth, broker, dashboard,
+                                       portfolio, transactions)
 
 # Create tables on startup
 create_tables()
@@ -72,6 +72,7 @@ app.include_router(portfolio.router, prefix="/api/portfolio", tags=["portfolio"]
 app.include_router(transactions.router, prefix="/api/transactions", tags=["transactions"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
 app.include_router(broker.router, prefix="/api/broker", tags=["broker"])
+app.include_router(analysis.router, prefix="/api/analysis", tags=["analysis"])
 
 
 # Public pages (no authentication required)

@@ -27,27 +27,32 @@ export function RegisterPage() {
   })
 
   return (
-    <div className="min-h-full bg-gradient-to-br from-bg to-surface">
-      <div className="mx-auto flex min-h-full max-w-md items-center px-4 py-12">
-        <div className="w-full rounded-xl border border-border bg-surface p-6 shadow-softLg">
-          <div className="mb-6 flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-primary-fg">
-              <BarChart3 className="h-5 w-5" />
+    <div className="min-h-full bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950 flex items-center justify-center px-4 relative overflow-hidden">
+      {/* Decorative gradient blobs */}
+      <div className="absolute top-0 left-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl -z-10 animate-pulse" />
+      <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl -z-10 animate-pulse" />
+      <div className="absolute top-1/2 right-1/3 w-72 h-72 bg-violet-400/5 rounded-full blur-3xl -z-10" />
+
+      <div className="w-full max-w-xl">
+        <div className="rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-indigo-900/50 to-slate-900/50 backdrop-blur-xl shadow-2xl p-8 hover:border-indigo-400/50 transition-all duration-300">
+          <div className="mb-8 flex items-center gap-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-700 text-white shadow-lg hover:shadow-2xl transition-all duration-300">
+              <BarChart3 className="h-7 w-7" />
             </div>
             <div>
-              <div className="text-lg font-semibold tracking-tight">Create your account</div>
-              <div className="text-sm text-muted">Get started in a minute</div>
+              <div className="text-2xl font-black tracking-tight bg-gradient-to-r from-indigo-300 to-purple-300 bg-clip-text text-transparent">Quatleap</div>
+              <div className="text-sm text-indigo-400/70">Create Your Account</div>
             </div>
           </div>
 
           {error ? (
-            <div className="mb-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+            <div className="mb-6 rounded-xl border border-rose-500/30 bg-rose-900/20 px-4 py-3 text-sm font-medium text-rose-300">
               {error}
             </div>
           ) : null}
 
           <form
-            className="space-y-4"
+            className="space-y-5"
             onSubmit={form.handleSubmit(async (values) => {
               setError(null)
               try {
@@ -63,65 +68,69 @@ export function RegisterPage() {
               }
             })}
           >
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <div className="sm:col-span-2">
-                <label className="text-sm font-medium">Email</label>
+                <label className="text-sm font-semibold text-indigo-300">Email Address</label>
                 <input
-                  className="mt-1 w-full rounded-xl border border-border bg-bg px-3 py-2 text-sm outline-none ring-primary focus:ring-2"
+                  className="mt-2 w-full rounded-lg border border-indigo-500/30 bg-indigo-950/50 px-4 py-2.5 text-sm text-indigo-50 placeholder-indigo-400/50 outline-none transition-all duration-200 focus:border-indigo-400 focus:bg-indigo-900/70 focus:ring-2 focus:ring-indigo-500/30"
                   type="email"
+                  placeholder="you@example.com"
                   autoComplete="email"
                   {...form.register('email')}
                 />
                 {form.formState.errors.email ? (
-                  <div className="mt-1 text-xs text-danger">{form.formState.errors.email.message}</div>
+                  <div className="mt-1.5 text-xs font-medium text-rose-400">{form.formState.errors.email.message}</div>
                 ) : null}
               </div>
 
               <div>
-                <label className="text-sm font-medium">Username</label>
+                <label className="text-sm font-semibold text-indigo-300">Username</label>
                 <input
-                  className="mt-1 w-full rounded-xl border border-border bg-bg px-3 py-2 text-sm outline-none ring-primary focus:ring-2"
+                  className="mt-2 w-full rounded-lg border border-indigo-500/30 bg-indigo-950/50 px-4 py-2.5 text-sm text-indigo-50 placeholder-indigo-400/50 outline-none transition-all duration-200 focus:border-indigo-400 focus:bg-indigo-900/70 focus:ring-2 focus:ring-indigo-500/30"
+                  placeholder="johndoe"
                   {...form.register('username')}
                 />
                 {form.formState.errors.username ? (
-                  <div className="mt-1 text-xs text-danger">{form.formState.errors.username.message}</div>
+                  <div className="mt-1.5 text-xs font-medium text-rose-400">{form.formState.errors.username.message}</div>
                 ) : null}
               </div>
 
               <div>
-                <label className="text-sm font-medium">Full name</label>
+                <label className="text-sm font-semibold text-indigo-300">Full Name</label>
                 <input
-                  className="mt-1 w-full rounded-xl border border-border bg-bg px-3 py-2 text-sm outline-none ring-primary focus:ring-2"
+                  className="mt-2 w-full rounded-lg border border-indigo-500/30 bg-indigo-950/50 px-4 py-2.5 text-sm text-indigo-50 placeholder-indigo-400/50 outline-none transition-all duration-200 focus:border-indigo-400 focus:bg-indigo-900/70 focus:ring-2 focus:ring-indigo-500/30"
+                  placeholder="John Doe"
                   {...form.register('full_name')}
                 />
               </div>
 
               <div className="sm:col-span-2">
-                <label className="text-sm font-medium">Password</label>
+                <label className="text-sm font-semibold text-indigo-300">Password</label>
                 <input
-                  className="mt-1 w-full rounded-xl border border-border bg-bg px-3 py-2 text-sm outline-none ring-primary focus:ring-2"
+                  className="mt-2 w-full rounded-lg border border-indigo-500/30 bg-indigo-950/50 px-4 py-2.5 text-sm text-indigo-50 placeholder-indigo-400/50 outline-none transition-all duration-200 focus:border-indigo-400 focus:bg-indigo-900/70 focus:ring-2 focus:ring-indigo-500/30"
                   type="password"
+                  placeholder="••••••••"
                   autoComplete="new-password"
                   {...form.register('password')}
                 />
                 {form.formState.errors.password ? (
-                  <div className="mt-1 text-xs text-danger">{form.formState.errors.password.message}</div>
+                  <div className="mt-1.5 text-xs font-medium text-rose-400">{form.formState.errors.password.message}</div>
                 ) : null}
               </div>
             </div>
 
             <button
-              className="inline-flex w-full items-center justify-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-fg shadow-soft hover:opacity-95 disabled:opacity-60"
+              className="w-full rounded-lg bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 px-4 py-3 text-sm font-bold text-white shadow-lg hover:shadow-2xl hover:shadow-indigo-500/20 disabled:opacity-60 transition-all duration-200 mt-6 hover:scale-105 active:scale-95"
               type="submit"
               disabled={form.formState.isSubmitting}
             >
-              {form.formState.isSubmitting ? 'Creating…' : 'Create account'}
+              {form.formState.isSubmitting ? 'Creating…' : 'Create Account'}
             </button>
           </form>
 
-          <div className="mt-5 text-center text-sm text-muted">
+          <div className="mt-6 text-center text-sm text-indigo-400/70">
             Already have an account?{' '}
-            <Link className="font-semibold text-primary hover:underline" to="/login">
+            <Link className="font-semibold text-indigo-400 hover:text-indigo-300 transition-colors" to="/login">
               Sign in
             </Link>
           </div>

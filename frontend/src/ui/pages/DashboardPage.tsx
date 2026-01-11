@@ -1,11 +1,20 @@
 import { useQuery } from '@tanstack/react-query'
-import { ArrowDownRight, ArrowUpRight, Briefcase, Coins, TrendingUp, Wallet } from 'lucide-react'
+import { Award, BarChart3, ArrowDownRight, ArrowUpRight, Briefcase, Coins, TrendingUp, TrendingDown, Wallet, Target, Activity, PieChart } from 'lucide-react'
 
 import { api } from '../../lib/api'
 import { formatCurrencyINR, formatPercent } from '../../lib/format'
 import { type DashboardStats } from '../../types/domain'
 import { Card } from '../components/Card'
 import { KpiCard } from '../components/KpiCard'
+import { PortfolioGrowthChart } from '../components/PortfolioGrowthChart'
+
+type GrowthDataPoint = {
+  year: number
+  month: number
+  value: number
+  nifty_value: number
+  label: string
+}
 
 async function fetchStats() {
   const { data } = await api.get<DashboardStats>('/dashboard/stats')
@@ -17,11 +26,23 @@ async function fetchStats() {
     gain_loss_percentage: Number(data.gain_loss_percentage) || 0,
     number_of_portfolios: Number(data.number_of_portfolios) || 0,
     number_of_assets: Number(data.number_of_assets) || 0,
+    average_return: data.average_return != null ? Number(data.average_return) : null,
+    diversification_score: Number(data.diversification_score) || 0,
+    winning_assets: Number(data.winning_assets) || 0,
+    losing_assets: Number(data.losing_assets) || 0,
+    best_performer: data.best_performer,
+    worst_performer: data.worst_performer,
   }
+}
+
+async function fetchGrowthData() {
+  const { data } = await api.get<GrowthDataPoint[]>('/dashboard/growth')
+  return data
 }
 
 export function DashboardPage() {
   const query = useQuery({ queryKey: ['dashboard', 'stats'], queryFn: fetchStats })
+  const growthQuery = useQuery({ queryKey: ['dashboard', 'growth'], queryFn: fetchGrowthData })
 
   if (query.isLoading) {
     return (
@@ -46,41 +67,137 @@ export function DashboardPage() {
 
   const stats = query.data
   const isUp = stats.total_gain_loss >= 0
+  const winRate = stats.number_of_assets > 0 ? (stats.winning_assets / stats.number_of_assets) * 100 : 0
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <div className="text-sm text-muted">Overview</div>
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <div className="text-xs font-bold uppercase tracking-widest text-indigo-400/70 flex items-center gap-2">
+            <span className="inline-block w-8 h-0.5 bg-gradient-to-r from-indigo-500 to-transparent rounded-full"></span>
+            Welcome back
+          </div>
+          <h1 className="mt-3 text-5xl font-black tracking-tight bg-gradient-to-r from-indigo-400 via-purple-300 to-indigo-500 bg-clip-text text-transparent">Portfolio Overview</h1>
         </div>
-        <div className="text-xs text-muted">MVP UI</div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <KpiCard label="Total Value" value={formatCurrencyINR(stats.total_portfolio_value)} icon={<Wallet className="h-4 w-4" />} />
-        <KpiCard label="Invested" value={formatCurrencyINR(stats.total_invested)} icon={<Coins className="h-4 w-4" />} />
-        <KpiCard
-          label="Total P&L"
-          value={formatCurrencyINR(stats.total_gain_loss)}
-          helper={formatPercent(stats.gain_loss_percentage)}
-          tone={isUp ? 'success' : 'danger'}
-          icon={
-            isUp ? (
-              <ArrowUpRight className="h-4 w-4 text-success" />
-            ) : (
-              <ArrowDownRight className="h-4 w-4 text-danger" />
-            )
-          }
-        />
-        <KpiCard label="Portfolios" value={String(stats.number_of_portfolios)} icon={<Briefcase className="h-4 w-4" />} />
-        <KpiCard label="Assets" value={String(stats.number_of_assets)} icon={<TrendingUp className="h-4 w-4" />} />
+      {/* Primary KPIs */}
+      <div>
+        <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-4 flex items-center gap-2">
+          <BarChart3 className="h-4 w-4" />
+          Portfolio Performance
+        </h2>
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <KpiCard label="Total Value" value={formatCurrencyINR(stats.total_portfolio_value)} icon={<Wallet className="h-5 w-5" />} />
+          <KpiCard label="Total Invested" value={formatCurrencyINR(stats.total_invested)} icon={<Coins className="h-5 w-5" />} />
+          <KpiCard
+            label="Total Return"
+            value={formatCurrencyINR(stats.total_gain_loss)}
+            helper={formatPercent(stats.gain_loss_percentage)}
+            tone={isUp ? 'success' : 'danger'}
+            icon={
+              isUp ? (
+                <ArrowUpRight className="h-5 w-5 text-success" />
+              ) : (
+                <ArrowDownRight className="h-5 w-5 text-danger" />
+              )
+            }
+          />
+          {stats.average_return != null && (
+            <KpiCard
+              label="Avg. Return"
+              value={formatPercent(stats.average_return)}
+              tone={stats.average_return >= 0 ? 'success' : 'danger'}
+              icon={<Target className="h-5 w-5" />}
+            />
+          )}
+        </div>
       </div>
 
-      <Card>
-        <div className="text-sm font-semibold">Next steps</div>
-        <div className="mt-1 text-sm text-muted">
-          Implement time-series charts, allocation breakdowns, and broker syncing inside the SPA.
+      {/* Performance Insights */}
+      <div>
+        <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-4 flex items-center gap-2">
+          <Activity className="h-4 w-4" />
+          Performance Insights
+        </h2>
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {stats.best_performer && (
+            <Card variant="gradient" className="border-emerald-500/30">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400 flex-shrink-0">
+                  <Award className="h-5 w-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-bold uppercase tracking-widest text-zinc-400">Best Performer</div>
+                  <div className="mt-1 text-lg font-black text-white truncate">{stats.best_performer.symbol}</div>
+                  <div className="text-sm font-bold text-emerald-400">{formatPercent(stats.best_performer.return_pct)}</div>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {stats.worst_performer && (
+            <Card variant="gradient" className="border-rose-500/30">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-rose-500/20 text-rose-400 flex-shrink-0">
+                  <TrendingDown className="h-5 w-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-bold uppercase tracking-widest text-zinc-400">Worst Performer</div>
+                  <div className="mt-1 text-lg font-black text-white truncate">{stats.worst_performer.symbol}</div>
+                  <div className="text-sm font-bold text-rose-400">{formatPercent(stats.worst_performer.return_pct)}</div>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          <Card>
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-400 flex-shrink-0">
+                <PieChart className="h-5 w-5" />
+              </div>
+              <div className="flex-1">
+                <div className="text-xs font-bold uppercase tracking-widest text-zinc-400">Win Rate</div>
+                <div className="mt-1 text-2xl font-black text-white">{winRate.toFixed(1)}%</div>
+                <div className="text-xs text-zinc-400 mt-1">
+                  {stats.winning_assets} wins / {stats.losing_assets} losses
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          <Card>
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-500/20 text-purple-400 flex-shrink-0">
+                <Briefcase className="h-5 w-5" />
+              </div>
+              <div className="flex-1">
+                <div className="text-xs font-bold uppercase tracking-widest text-zinc-400">Diversification</div>
+                <div className="mt-1 text-2xl font-black text-white">{stats.diversification_score}</div>
+                <div className="text-xs text-zinc-400 mt-1">
+                  Unique assets across {stats.number_of_portfolios} portfolio{stats.number_of_portfolios !== 1 ? 's' : ''}
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </div>
+
+      {/* Growth Chart */}
+      <PortfolioGrowthChart data={growthQuery.data || []} isLoading={growthQuery.isLoading} />
+
+      <Card variant="gradient" className="relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -z-10" />
+        <div className="flex items-start gap-5">
+          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500/30 to-purple-500/30 text-indigo-300 flex-shrink-0 shadow-lg">
+            <TrendingUp className="h-7 w-7" />
+          </div>
+          <div className="flex-1">
+            <div className="text-lg font-black text-white mb-1">Next Steps</div>
+            <div className="text-sm text-zinc-300 leading-relaxed">
+              Connect your broker accounts to start syncing holdings and tracking performance across multiple exchanges.
+            </div>
+          </div>
         </div>
       </Card>
     </div>

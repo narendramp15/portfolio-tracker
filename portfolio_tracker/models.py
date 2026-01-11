@@ -34,6 +34,23 @@ class UserModel(Base):
 
     # Relationships
     portfolios = relationship("PortfolioModel", back_populates="owner", cascade="all, delete-orphan")
+    password_reset_tokens = relationship("PasswordResetTokenModel", back_populates="user", cascade="all, delete-orphan")
+
+
+class PasswordResetTokenModel(Base):
+    """SQLAlchemy model for Password Reset Tokens."""
+
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    token = Column(String(255), unique=True, index=True, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    used = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    # Relationships
+    user = relationship("UserModel", back_populates="password_reset_tokens")
 
 
 class PortfolioModel(Base):

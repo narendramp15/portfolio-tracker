@@ -1,19 +1,17 @@
 """Authentication API endpoints."""
 
+import secrets
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from datetime import timedelta
 
+from portfolio_tracker import models, schemas
+from portfolio_tracker.auth import (ACCESS_TOKEN_EXPIRE_MINUTES,
+                                    create_access_token, decode_access_token,
+                                    hash_password, verify_password)
 from portfolio_tracker.database import get_db
-from portfolio_tracker import schemas, models
-from portfolio_tracker.auth import (
-    hash_password,
-    verify_password,
-    create_access_token,
-    decode_access_token,
-    ACCESS_TOKEN_EXPIRE_MINUTES,
-)
 
 router = APIRouter()
 
@@ -135,3 +133,101 @@ async def get_current_user(db: Session = Depends(get_db), token: str = None):
         )
     
     return user
+
+
+@router.post("/forgot-password", response_model=schemas.MessageResponse)
+async def forgot_password(
+    request: schemas.PasswordResetRequest,
+    db: Session = Depends(get_db)
+):
+    """Request a password reset token."""
+    # Find user by email
+    user = db.query(models.UserModel).filter(
+        models.UserModel.email == request.email
+    ).first()
+    
+    # Always return success to prevent email enumeration
+    if not user:
+        return {"message": "If the email exists, a reset token has been generated. Use it within 1 hour."}
+    
+    # Generate secure token
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+    
+    # Invalidate any existing tokens for this user
+    db.query(models.PasswordResetTokenModel).filter(
+        models.PasswordResetTokenModel.user_id == user.id,
+        models.PasswordResetTokenModel.used == False
+    ).update({"used": True})
+    
+    # Create new reset token
+    reset_token = models.PasswordResetTokenModel(
+        user_id=user.id,
+        token=token,
+        expires_at=expires_at,
+        used=False
+    )
+    db.add(reset_token)
+    db.commit()
+    
+    # In production, send email here
+    # For now, just log the token (development only!)
+    print(f"🔑 Password reset token for {user.email}: {token}")
+    print(f"   Token expires at: {expires_at}")
+    print(f"   Use this token in the reset password form within 1 hour.")
+    
+    return {"message": "If the email exists, a reset token has been generated. Use it within 1 hour."}
+
+
+@router.post("/reset-password", response_model=schemas.MessageResponse)
+async def reset_password(
+    request: schemas.PasswordReset,
+    db: Session = Depends(get_db)
+):
+    """Reset password using a valid token."""
+    # Find the reset token
+    reset_token = db.query(models.PasswordResetTokenModel).filter(
+        models.PasswordResetTokenModel.token == request.token,
+        models.PasswordResetTokenModel.used == False
+    ).first()
+    
+    if not reset_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token"
+        )
+    
+    # Check if token is expired - handle timezone-aware/naive comparison
+    now = datetime.now(timezone.utc)
+    expires_at = reset_token.expires_at
+    
+    # Ensure both datetimes are timezone-aware for comparison
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    
+    if now > expires_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reset token has expired"
+        )
+    
+    # Get the user
+    user = db.query(models.UserModel).filter(
+        models.UserModel.id == reset_token.user_id
+    ).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Update password
+    user.hashed_password = hash_password(request.new_password)
+    
+    # Mark token as used
+    reset_token.used = True
+    
+    db.commit()
+    
+    return {"message": "Password has been reset successfully"}

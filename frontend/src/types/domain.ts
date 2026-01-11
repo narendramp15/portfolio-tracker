@@ -20,6 +20,23 @@ export type DashboardStats = {
   gain_loss_percentage: number
   number_of_portfolios: number
   number_of_assets: number
+  today_change?: number | null
+  today_change_percentage?: number | null
+  best_performer?: {
+    symbol: string
+    name: string
+    return_pct: number
+  } | null
+  worst_performer?: {
+    symbol: string
+    name: string
+    return_pct: number
+  } | null
+  average_return?: number | null
+  total_return_percentage?: number | null
+  diversification_score?: number | null
+  winning_assets?: number | null
+  losing_assets?: number | null
 }
 
 export type Asset = {

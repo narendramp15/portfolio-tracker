@@ -19,9 +19,9 @@ const brokerIcons: Record<BrokerType, string> = {
 }
 
 const brokerColors: Record<BrokerType, string> = {
-    zerodha: 'from-purple-600 to-purple-700',
-    angel: 'from-pink-600 to-pink-700',
-    fivepaisa: 'from-cyan-600 to-cyan-700',
+    zerodha: 'from-purple-600 via-purple-500 to-violet-600',
+    angel: 'from-pink-600 via-pink-500 to-rose-600',
+    fivepaisa: 'from-cyan-600 via-cyan-500 to-blue-600',
 }
 
 export function BrokerSetupForm({ brokerType, brokerName, onSuccess }: BrokerSetupFormProps) {
@@ -67,7 +67,7 @@ export function BrokerSetupForm({ brokerType, brokerName, onSuccess }: BrokerSet
         return (
             <button
                 onClick={() => setIsOpen(true)}
-                className={`inline-flex items-center gap-2 rounded-lg bg-gradient-to-r ${brokerColors[brokerType]} px-4 py-2 text-sm font-semibold text-white hover:shadow-lg transition-all`}
+                className={`inline-flex items-center gap-2 rounded-xl bg-gradient-to-r ${brokerColors[brokerType]} px-5 py-2.5 text-sm font-bold text-white hover:shadow-xl hover:shadow-purple-500/20 transition-all duration-300 hover:scale-105 active:scale-95`}
             >
                 <Plus className="h-4 w-4" />
                 Connect

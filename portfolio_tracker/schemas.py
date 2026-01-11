@@ -54,6 +54,35 @@ class TokenData(BaseModel):
     email: Optional[str] = None
 
 
+class PasswordResetRequest(BaseModel):
+    """Schema for password reset request."""
+
+    email: EmailStr = Field(..., description="User email address")
+
+
+class PasswordReset(BaseModel):
+    """Schema for password reset."""
+
+    token: str = Field(..., description="Password reset token")
+    new_password: str = Field(..., min_length=8, description="New password (min 8 characters)")
+
+
+class MessageResponse(BaseModel):
+    """Generic message response."""
+
+    message: str
+
+
+class GrowthDataPoint(BaseModel):
+    """Schema for growth chart data point."""
+
+    year: int
+    month: int
+    value: float
+    nifty_value: float
+    label: str
+
+
 # Asset Schemas
 class AssetBase(BaseModel):
     """Base asset schema."""
@@ -166,6 +195,17 @@ class DashboardStats(BaseModel):
     gain_loss_percentage: Decimal
     number_of_portfolios: int
     number_of_assets: int
+    
+    # Professional KPIs
+    today_change: Optional[Decimal] = None
+    today_change_percentage: Optional[Decimal] = None
+    best_performer: Optional[dict] = None  # {symbol, name, return_pct}
+    worst_performer: Optional[dict] = None  # {symbol, name, return_pct}
+    average_return: Optional[Decimal] = None
+    total_return_percentage: Optional[Decimal] = None
+    diversification_score: Optional[int] = None  # Number of unique assets
+    winning_assets: Optional[int] = None  # Assets with positive returns
+    losing_assets: Optional[int] = None  # Assets with negative returns
 
 # Broker Configuration Schemas
 class BrokerConfigBase(BaseModel):
@@ -215,6 +255,40 @@ class BrokerSyncResponse(BaseModel):
     message: str
     holdings_count: int = 0
     assets_imported: int = 0
+
+
+# Technical Analysis Schemas
+class TechnicalIndicators(BaseModel):
+    """Schema for technical indicators."""
+
+    rsi: float
+    macd: dict
+    moving_averages: dict
+    bollinger_bands: dict
+    volume: dict
+
+
+class TechnicalAnalysis(BaseModel):
+    """Schema for technical analysis with AI recommendation."""
+
+    asset_id: int
+    symbol: str
+    name: str
+    portfolio_name: str
+    current_price: float
+    purchase_price: float
+    quantity: float
+    invested_value: float
+    current_value: float
+    gain_loss: float
+    gain_loss_percentage: float
+    indicators: dict
+    recommendation: str
+    action_text: str
+    confidence: int
+    signals: list[str]
+    bullish_factors: int
+    bearish_factors: int
 
 
 class BrokerTransactionsSyncResponse(BaseModel):
