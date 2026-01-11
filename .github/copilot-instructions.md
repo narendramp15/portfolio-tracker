@@ -12,137 +12,135 @@
 
 ### Backend Architecture
 1. **Routers Pattern**: API endpoints organized in `portfolio_tracker/routers/` (auth, broker, portfolio, transactions, dashboard)
-2. **Models → Schemas Pipeline**: SQLAlchemy ORM models in `models.py` are validated against Pydantic schemas in `schemas.py` for request/response consistency
-3. **Dependency Injection**: FastAPI's `Depends()` for auth (`get_current_user`), database sessions (`get_db`), and CRUD operations
-4. **Encryption for Secrets**: `EncryptionManager` encrypts broker API keys/secrets before DB storage (see `portfolio_tracker/encryption.py`)
-5. **CORS**: Wildcard allow-origins for dev; restrict in production
+   - Each domain has dedicated router files; routers registered twice for backward compatibility (see `main.py` lines 66-75)
+2. **Models → Schemas Pipeline**: SQLAlchemy ORM models in `models.py` → Pydantic schemas in `schemas.py` for request/response validation
+3. **Dependency Injection**: FastAPI's `Depends()` for auth (`get_current_user` from `deps.py`), database sessions (`get_db`), CRUD operations
+4. **Encryption for Secrets**: `EncryptionManager` encrypts/decrypts broker credentials before DB storage
+5. **CORS**: Wildcard allow-origins for dev; must restrict for production
 
 ### Frontend Architecture
-1. **React Router v7**: App-based routing in `src/router/router.tsx` with `RequireAuth` wrapper for protected routes
+1. **React Router v7**: App-based routing in `src/router/router.tsx` with `RequireAuth` protection wrapper
 2. **Zustand State**: Minimal global state (`selectedPortfolioId`) in `src/store/appStore.ts` with localStorage persistence
-3. **TanStack Query (React Query)**: Primary data fetching (not visible in provided files but inferred from package.json)
-4. **Axios Interceptor**: Bearer token auto-injection from `localStorage.access_token` in `src/lib/api.ts`
-5. **Tailwind + Lucide Icons**: CSS utility-first with lucide-react for consistent iconography
+3. **TanStack Query**: Primary data fetching with caching; uses `api` client for all requests
+4. **Axios Interceptor**: Bearer token auto-injected from `localStorage.access_token` in `src/lib/api.ts`
+5. **Tailwind + Lucide**: CSS utility-first with lucide-react icons
 
 ### Broker Integration Pattern
-- **Pluggable Brokers**: `portfolio_tracker/brokers/` contains broker-specific classes (ZerodhaBroker, AngelBroker, FivepaisaBroker)
-- **OAuth2 Flow**: Zerodha uses KiteConnect OAuth → broker redirects to `ZERODHA_REDIRECT_URL` after user authorization
-- **Unified Interface**: All brokers inherit interface with methods: `get_holdings()`, `get_login_url()`, `set_access_token()`
-- **Credential Storage**: API keys encrypted and stored in `broker_config` table per user
+- **Pluggable Brokers**: `portfolio_tracker/brokers/` contains broker classes (ZerodhaBroker, AngelBroker, FivepaisaBroker)
+- **OAuth2 Flow**: Zerodha redirects to `ZERODHA_REDIRECT_URL` env var after user login
+- **Unified Interface**: `__init__()`, `get_login_url()`, `set_access_token(request_token)`, `set_token(token)`, `get_holdings()` 
+- **Credential Storage**: Encrypted per-user in `broker_config` table via `EncryptionManager`
+- **Query Params**: Broker setup endpoints use Query params (not request body) - e.g., `api_key=...&api_secret=...`
 
 ## Development Workflows
 
 ### Setup & Running
 ```bash
-# Backend setup (Python 3.13+ required)
-uv sync --all-extras          # Install deps with dev tools
+# Backend (Python 3.13+ required)
+uv sync --all-extras
 uv run uvicorn portfolio_tracker.main:app --reload
 
-# Frontend setup
-cd frontend
-npm install
-npm run dev                   # Vite dev server (proxies /api to localhost:8000)
+# Frontend (separate terminal)
+cd frontend && npm install && npm run dev  # Proxies /api to localhost:8000
 ```
 
-### Testing
+### Testing & Quality
 ```bash
-uv run pytest --cov=portfolio_tracker  # Runs tests, generates htmlcov/
+uv run pytest --cov=portfolio_tracker  # Run with coverage
+uv run black . && uv run ruff check . && uv run mypy portfolio_tracker  # All checks
 ```
 
-### Code Quality
+### Production Build
 ```bash
-uv run black .                # Format Python files
-uv run ruff check .           # Lint
-uv run mypy portfolio_tracker # Type checking
-```
-
-### Building for Production
-```bash
-cd frontend && npm run build  # Creates frontend/dist/
-# FastAPI serves SPA from frontend/dist/index.html
+cd frontend && npm run build  # Creates dist/; FastAPI serves from there
 ```
 
 ## Key Code Patterns
 
 ### Database & CRUD
-- **Session Management**: Use `db: Session = Depends(get_db)` in router functions
-- **Relationships**: SQLAlchemy back_populates for bidirectional relationships (e.g., User ↔ Portfolios)
-- **Decimal Precision**: Financial values use `Decimal` type, not float (see `_to_decimal()` in models.py)
-- **Timestamp Defaults**: All models have `created_at`, `updated_at` with timezone-aware datetime
+- **Session Management**: `db: Session = Depends(get_db)` in router functions
+- **Relationships**: SQLAlchemy `back_populates` for bidirectional refs; `cascade="all, delete-orphan"` for cleanup
+- **Decimal Precision**: Use `Decimal(20,8)` for financial values (never float) - converted via `_to_decimal()` helper
+- **Timestamps**: All models have `created_at` (immutable), `updated_at` (auto-updates) with timezone-aware datetime
 
-### Authentication
-- **JWT Tokens**: `create_access_token()` generates bearer tokens (see `portfolio_tracker/auth.py`)
-- **Protected Routes**: Depend on `get_current_user` which decodes JWT and fetches user from DB
-- **Hash Storage**: Passwords hashed with argon2 (passlib), never stored plaintext
+### Authentication  
+- **JWT Tokens**: Generated by `create_access_token()` in `auth.py`; decoded by `get_current_user` in `deps.py`
+- **Protected Routes**: Depend on `get_current_user` which fetches user from DB after JWT decode
+- **Password Hashing**: Argon2 via passlib; never store plaintext
+- **Storage**: JWT in localStorage key `access_token`, auto-injected by axios
 
 ### API Design
-- **Base URL**: `/api/{resource}` prefix for all REST endpoints
-- **Request/Response**: Pydantic schemas ensure validation; use `response_model` in route decorator
-- **Error Handling**: Raise `HTTPException` with appropriate status codes (400, 401, 404, etc.)
-- **Duplicate Routes**: Note auth/broker routers registered twice (backward compatibility) at `/api/auth` and legacy prefix
+- **Base URL**: All routes under `/api/{resource}` (mounted in `main.py`)
+- **Query Parameters**: Broker setup prefers Query params - e.g., `POST /api/broker/zerodha/setup?api_key=...&api_secret=...`
+- **Validation**: Pydantic schemas; use `response_model` in route decorators
+- **Errors**: Raise `HTTPException` with status codes; details shown to frontend
+- **Backward Compat**: Routers registered at multiple prefixes for old API consumers
 
 ### Frontend Components
-- **Card Component**: Base UI wrapper in `src/ui/components/Card.tsx` (used by BrokerSetupForm)
-- **Form Pattern**: React Hook Form + Zod validation (inferred from dependencies)
-- **API Calls**: Use `api` axios client from `src/lib/api.ts` (auto-injects Bearer token)
-- **Gradient Colors**: Broker cards use Tailwind gradient classes by type (`from-purple-600 to-purple-700`)
+- **Card Component**: Base wrapper in `src/ui/components/Card.tsx` - template for other cards
+- **BrokerSetupForm**: Accepts `brokerType` (union type), `brokerName`, `onSuccess` callback
+- **API Calls**: Use `api` axios instance from `src/lib/api.ts` (auto-adds Bearer header)
+- **Gradients**: Tailwind classes by broker: zerodha=`purple-600/700`, angel=`pink-600/700`, fivepaisa=`cyan-600/700`
 
 ## Critical Files & Concepts
 
 | File | Purpose |
 |------|---------|
-| `portfolio_tracker/main.py` | FastAPI app init, router mounting, SPA serving |
-| `portfolio_tracker/models.py` | SQLAlchemy ORM definitions (User, Portfolio, Asset, etc.) |
-| `portfolio_tracker/schemas.py` | Pydantic validation schemas (UserRegister, AssetBase, etc.) |
-| `portfolio_tracker/routers/*.py` | API endpoint implementations by domain |
-| `portfolio_tracker/brokers/*.py` | Broker-specific API integrations |
-| `portfolio_tracker/encryption.py` | EncryptionManager for secure credential storage |
-| `frontend/src/App.tsx` | React router setup + provider wrappers |
-| `frontend/src/lib/api.ts` | Axios instance with JWT interceptor |
-| `frontend/src/store/appStore.ts` | Zustand store for portfolio selection state |
+| `main.py` | FastAPI init, CORS, router mounting, SPA static serving |
+| `models.py` | SQLAlchemy ORM: User, Portfolio, Asset, Transaction, BrokerTemplate, BrokerConfig |
+| `schemas.py` | Pydantic: UserRegister, AssetBase, BrokerHolding, BrokerConfig schemas |
+| `routers/*.py` | Domain-specific endpoints (auth, broker, portfolio, transactions, dashboard) |
+| `brokers/*.py` | Broker integrations (Zerodha KiteConnect, Angel, 5Paisa) |
+| `encryption.py` | EncryptionManager for credential encryption/decryption |
+| `database.py` | SQLAlchemy Base, connection, `create_tables()` on startup |
+| `crud.py` | Helper functions for CRUD operations |
+| `deps.py` | FastAPI dependencies: `get_current_user`, `get_db` |
+| `frontend/src/App.tsx` | React Router + AppProviders |
+| `frontend/src/lib/api.ts` | Axios instance + JWT interceptor |
+| `frontend/src/store/appStore.ts` | Zustand store for portfolio selection |
 
 ## Common Tasks
 
 ### Adding a New Broker
-1. Create `portfolio_tracker/brokers/{broker_name}.py` with class inheriting broker interface
-2. Implement: `__init__()`, `get_login_url()`, `get_holdings()`, `set_token()`
-3. Add router endpoint in `portfolio_tracker/routers/broker.py` (mirror Zerodha pattern)
-4. Update frontend `BrokerSetupForm.tsx` to include new broker type and colors
-5. Store encrypted credentials using `EncryptionManager.encrypt()`
+1. Create `portfolio_tracker/brokers/new_broker.py` implementing interface methods
+2. Add `@router.post("/new_broker/setup")` endpoint in `broker.py` using Query params
+3. Handle OAuth callback: decrypt creds, exchange token, store encrypted access token via `crud.update_broker_config()`
+4. Update `BrokerSetupForm.tsx`: add to `BrokerType` union, `brokerColors`, `brokerIcons` records
+5. Test: creds → login URL → callback → holdings
 
 ### Adding an API Endpoint
-1. Define request/response Pydantic schema in `portfolio_tracker/schemas.py`
-2. Add route in appropriate `portfolio_tracker/routers/{domain}.py`
-3. Use `Depends(get_current_user)` and `Depends(get_db)` for auth/DB access
-4. Call CRUD functions from `portfolio_tracker/crud.py` for DB operations
-5. Return Pydantic-validated response
+1. Define Pydantic schemas in `schemas.py`
+2. Add route in `routers/{domain}.py` with `Depends(get_current_user)`, `Depends(get_db)`
+3. Use CRUD helpers from `crud.py` for database operations
+4. Return validated Pydantic response
 
 ### Modifying Frontend State
-1. Update Zustand store in `frontend/src/store/appStore.ts` if cross-component state needed
-2. Use `useAppStore()` hook in components to read/write state
-3. For API-driven data: use TanStack Query (inferred from dependencies)
-4. Store sensitive data (JWT) in localStorage via interceptor
+1. **Global state**: Update Zustand store in `appStore.ts`, use `useAppStore()` hook
+2. **API data**: Use TanStack Query with `api` client
+3. **Sensitive data**: Store only in localStorage (via interceptor), never in Zustand
 
 ## Database & Environment
 
-- **SQLite by default** (check `portfolio_tracker/database.py` for connection string)
-- **Environment Variables**: Uses python-dotenv; common vars: `ZERODHA_API_KEY`, `ZERODHA_API_SECRET`, `ZERODHA_REDIRECT_URL`
-- **Migrations**: Not using Alembic (models.py auto-creates tables on startup via `create_tables()`)
-- **Transaction Model**: Financial transactions linked to Assets with price, quantity, type (buy/sell)
+- **SQLite**: Default database (configured in `database.py`)
+- **Env vars**: `ZERODHA_API_KEY`, `ZERODHA_API_SECRET`, `ZERODHA_REDIRECT_URL` (and Angel/5Paisa equivalents)
+- **Migrations**: No Alembic; models auto-create tables on startup via `create_tables()`
+- **Transaction Model**: Linked to Assets with price, quantity, type (buy/sell)
 
 ## Important Conventions
 
-- **Type Hints**: Use full type annotations in Python (mypy enabled)
-- **Naming**: Snake_case for Python, camelCase for TypeScript/React
-- **Component Structure**: Each UI component in `frontend/src/ui/components/` as separate file
-- **Error Messages**: User-facing errors in HTTPException detail; logged server-side
-- **Decimal Math**: Always use Decimal for financial calculations, never float
-- **Token Storage**: JWT stored in localStorage under key `access_token`
-- **CORS**: Dev mode allows all origins; update in `main.py` for production
+- **Type Hints**: Full annotations required (mypy enabled)
+- **Naming**: snake_case (Python), camelCase (TypeScript/React)
+- **Components**: One per file in `frontend/src/ui/components/`
+- **Errors**: User-facing in HTTPException detail; server-side logging
+- **Finance**: Always Decimal (never float) - use `_to_decimal()` helper
+- **Tokens**: localStorage key `access_token`, injected by axios
+- **CORS**: Dev allows all; restrict in production via `main.py`
+- **Unused Files**: `schema.py` (singular) unused - use `schemas.py`
 
-## Performance Notes
+## Debugging Tips
 
-- Frontend dev server proxies `/api/*` requests to `localhost:8000` (see vite.config.ts)
-- Production: Static SPA assets served by FastAPI from `frontend/dist/`
-- TanStack Query handles caching and request deduplication
-- SQLAlchemy relationships use lazy-loading; add `.options()` for N+1 prevention if needed
+- **Backend logs**: `uv run uvicorn portfolio_tracker.main:app --reload --log-level debug`
+- **Network requests**: Browser DevTools → Network tab to inspect `/api/*` + JWT headers
+- **Database**: SQLite browser to view `portfolio.db`
+- **Encryption**: Verify `EncryptionManager.encrypt/decrypt` symmetry in broker callbacks
+- **CORS errors**: Check `CORSMiddleware` in `main.py`
