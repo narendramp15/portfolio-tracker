@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { api } from '../../lib/api';
+import { api } from '../../lib/api.ts';
 import { LayoutList, LayoutGrid, TrendingUp, TrendingDown, Activity, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 
 // Complete types

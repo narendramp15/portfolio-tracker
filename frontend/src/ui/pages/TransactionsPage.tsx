@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Filter, Search } from 'lucide-react'
 
-import { api } from '../../lib/api'
-import { formatCurrencyINR } from '../../lib/format'
+import { api } from '../../lib/api.ts'
+import { formatCurrencyINR } from '../../lib/format.ts'
 import { type TransactionRow } from '../../types/domain'
 import { Card } from '../components/Card'
 
@@ -20,8 +20,8 @@ export function TransactionsPage() {
   const rows = useMemo(() => {
     const list = query.data ?? []
     return list
-      .filter((r) => (type === 'all' ? true : r.transaction_type?.toLowerCase() === type))
-      .filter((r) => {
+      .filter((r: TransactionRow) => (type === 'all' ? true : r.transaction_type?.toLowerCase() === type))
+      .filter((r: TransactionRow) => {
         if (!q.trim()) return true
         const needle = q.trim().toLowerCase()
         return (
@@ -91,7 +91,7 @@ export function TransactionsPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((t) => (
+                {rows.map((t: TransactionRow) => (
                   <tr key={t.id} className="border-b border-border hover:bg-bg">
                     <td className="px-4 py-3 text-sm text-muted">
                       {new Date(t.transaction_date).toLocaleDateString('en-IN')}

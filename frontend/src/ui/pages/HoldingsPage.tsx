@@ -35,10 +35,10 @@ export function HoldingsPage() {
 
   const holdings = useMemo(() => {
     const filteredPortfolios =
-      selectedPortfolioId === null ? portfolios : portfolios.filter((p) => p.id === selectedPortfolioId)
+      selectedPortfolioId === null ? portfolios : portfolios.filter((p: Portfolio) => p.id === selectedPortfolioId)
 
-    return filteredPortfolios.flatMap((p) =>
-      (p.assets ?? []).map((a) => {
+    return filteredPortfolios.flatMap((p: Portfolio) =>
+      (p.assets ?? []).map((a: Portfolio['assets'][number]) => {
         const qty = Number(a.quantity)
         const ltp = Number(a.current_price)
         const avg = Number(a.purchase_price)
@@ -122,7 +122,7 @@ export function HoldingsPage() {
             title="Filter holdings by portfolio"
           >
             <option value="">All portfolios</option>
-            {portfolios.map((p) => (
+            {portfolios.map((p: Portfolio) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
@@ -187,7 +187,7 @@ export function HoldingsPage() {
                 </tr>
               </thead>
               <tbody>
-                {holdings.map((h) => (
+                {holdings.map((h: typeof holdings[number]) => (
                   <tr key={`${h.portfolio_id}-${h.id}`} className="border-b border-border hover:bg-bg">
                     <td className="px-4 py-3">
                       <div className="font-semibold">{h.symbol}</div>
@@ -272,7 +272,7 @@ export function HoldingsPage() {
                       onChange={(e) => setAddPortfolioId(e.target.value ? Number(e.target.value) : '')}
                     >
                       <option value="">Select portfolio</option>
-                      {portfolios.map((p) => (
+                      {portfolios.map((p: Portfolio) => (
                         <option key={p.id} value={p.id}>
                           {p.name}
                         </option>

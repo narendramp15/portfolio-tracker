@@ -2,8 +2,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useParams, useNavigate } from 'react-router-dom'
 import { TrendingUp, TrendingDown, Activity, Target, Zap, AlertCircle, CheckCircle, ArrowUpRight, ArrowDownRight, ArrowLeft } from 'lucide-react'
 
-import { api } from '../../lib/api'
-import { formatCurrencyINR } from '../../lib/format'
+import { api } from '../../lib/api.ts'
+import { formatCurrencyINR } from '../../lib/format.ts'
 import { Card } from '../components/Card'
 
 type TechnicalAnalysis = {
@@ -295,7 +295,7 @@ export function TechnicalAnalysisDetailPage() {
                         </h4>
 
                         <div className="space-y-2">
-                            {item.signals.map((signal, idx) => (
+                            {item.signals.map((signal: string, idx: number) => (
                                 <div key={idx} className="flex items-start gap-2 p-3 rounded-lg bg-indigo-50 dark:bg-surface border border-border">
                                     <CheckCircle className="h-4 w-4 text-indigo-400 flex-shrink-0 mt-0.5" />
                                     <p className="text-xs text-indigo-900 dark:text-text leading-relaxed">{signal}</p>
