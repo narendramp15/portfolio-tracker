@@ -3,13 +3,11 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { api } from '../../lib/api'
 import type { User } from '../../types/domain'
-import { useAuth } from '../../providers/auth/AuthProvider'
 
 export function AuthCallbackPage() {
     const navigate = useNavigate()
     const [searchParams] = useSearchParams()
     const [error, setError] = useState<string | null>(null)
-    const { login } = useAuth()
 
     useEffect(() => {
         const token = searchParams.get('token')
