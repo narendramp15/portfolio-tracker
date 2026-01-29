@@ -5,6 +5,52 @@ Transform from a basic portfolio tracker into a comprehensive financial intellig
 
 ---
 
+## ✅ Codebase-Informed Roadmap (Engineering Priorities)
+
+These items are derived from reviewing the current FastAPI + React implementation. They focus on correctness, consistency, and production-readiness (the things that make users trust a financial product).
+
+### A. Data correctness (highest priority)
+- [ ] **Holdings computed from transactions (source of truth)**
+  - Model FIFO lots so average cost, realized P&L, and remaining quantity are correct
+  - Prevent invalid sells (sell quantity > available)
+  - Treat the `assets` table as a cached snapshot (optional) vs primary truth
+
+### B. API consistency & typing
+- [ ] **Standardize API response models**
+  - Add Pydantic response models for transactions list/detail (no ad-hoc dicts)
+  - Avoid returning `[]` on server errors; return proper `HTTPException` and log
+- [ ] **Unify auth dependency usage**
+  - Ensure authenticated endpoints use the same token extraction logic (header + `?token=`)
+  - Make `/api/auth/me` use the shared dependency approach
+
+### C. Production security & reliability
+- [ ] **Lock down CORS for production**
+  - Never use `ALLOWED_ORIGINS="*"` with `allow_credentials=True` in production
+- [ ] **Replace password reset token logging**
+  - Send email via provider (Postmark/SendGrid) instead of printing tokens
+- [ ] **Add rate limiting to auth endpoints**
+  - Protect `/api/auth/login`, `/api/auth/register`, `/api/auth/forgot-password`
+
+### D. Broker sync “productization”
+- [ ] **Scheduled background sync**
+  - Daily sync jobs with retries (Celery/Redis or APScheduler)
+  - Persist sync runs (start/end, status, error, imported counts)
+- [ ] **Reconciliation checks**
+  - Detect mismatch between broker holdings and computed holdings; surface warnings
+
+### E. Market data & performance history
+- [ ] **Market price service**
+  - Store daily price history (EOD) per symbol for charts and performance
+- [ ] **Returns that match cashflows**
+  - Implement TWR and XIRR correctly from transactions and portfolio value history
+
+### F. Reporting & tax readiness
+- [ ] **Capital gains reporting**
+  - STCG/LTCG using transaction lots + holding period
+  - Export CSV first, then PDF
+
+---
+
 ## Phase 1: Core Enhancement (Weeks 1-4)
 
 ### 1. Enhanced Portfolio Analytics

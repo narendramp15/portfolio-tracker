@@ -105,6 +105,39 @@ Then run the backend normally. When `frontend/dist/index.html` exists, FastAPI s
 
 ## Configuration
 
+### Database Options
+
+**SQLite (Development - Default)**
+```bash
+# Automatically created at ./portfolio.db
+# Good for local development only
+DATABASE_URL=sqlite:///./portfolio.db
+```
+
+**PostgreSQL (Production - Recommended)**
+
+Choose one of these free options:
+
+**Option 1: Supabase (Recommended - No expiration)**
+1. Create project at https://supabase.com
+2. Get connection string from Settings → Database → Connection String (URI)
+3. Set in `.env`:
+   ```env
+   DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@db.PROJECT_ID.supabase.co:5432/postgres
+   ```
+
+**Option 2: Render PostgreSQL (Free for 90 days)**
+- Auto-created when deploying via Blueprint
+- See [RENDER_DEPLOY.md](RENDER_DEPLOY.md) for setup
+
+**Option 3: Other providers**
+- Neon (free tier)
+- ElephantSQL
+- Railway
+- Heroku Postgres
+
+### Environment Variables
+
 1. Copy `.env.example` to `.env`:
 ```bash
 cp .env.example .env
@@ -113,7 +146,14 @@ cp .env.example .env
 2. Update the `.env` file with your configuration:
 ```env
 DEBUG=True
-DATABASE_URL=sqlite:///./portfolio.db
+DATABASE_URL=postgresql://user:password@host:5432/dbname  # Use PostgreSQL for persistence
+SECRET_KEY=your-secret-key-here  # Generate with: openssl rand -hex 32
+ENCRYPTION_KEY=your-encryption-key  # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# Broker API credentials (optional)
+ZERODHA_API_KEY=your_zerodha_api_key
+ZERODHA_API_SECRET=your_zerodha_api_secret
+ZERODHA_REDIRECT_URL=http://localhost:8000/api/broker/zerodha/callback
 ```
 
 ## Usage
