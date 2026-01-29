@@ -15,6 +15,7 @@ from portfolio_tracker.auth import (ACCESS_TOKEN_EXPIRE_MINUTES,
                                     create_access_token, decode_access_token,
                                     hash_password, verify_password)
 from portfolio_tracker.database import get_db
+from portfolio_tracker.deps import get_current_user
 
 router = APIRouter()
 
@@ -120,32 +121,9 @@ async def login(user_data: schemas.UserLogin, db: Session = Depends(get_db)):
 
 
 @router.get("/me", response_model=schemas.UserResponse)
-async def get_current_user(db: Session = Depends(get_db), token: str = None):
+async def get_current_user_endpoint(current_user: models.UserModel = Depends(get_current_user)):
     """Get current authenticated user."""
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated"
-        )
-    
-    email = decode_access_token(token)
-    if not email:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication token"
-        )
-    
-    user = db.query(models.UserModel).filter(
-        models.UserModel.email == email
-    ).first()
-    
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
-        )
-    
-    return user
+    return current_user
 
 
 @router.post("/forgot-password", response_model=schemas.MessageResponse)

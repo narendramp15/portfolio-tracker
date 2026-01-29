@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
 
 from portfolio_tracker.database import create_tables
 from portfolio_tracker.routers import (analysis, auth, broker, dashboard,
@@ -33,6 +34,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add Session middleware for OAuth (must be before routes)
+SESSION_SECRET = os.getenv("SECRET_KEY", "your-secret-key-change-this-in-production-12345678")
+app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
 
 # Mount static files
 static_path = os.path.join(os.path.dirname(__file__), "static")
