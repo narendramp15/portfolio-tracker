@@ -13,6 +13,7 @@ import { ResetPasswordPage } from '../ui/pages/ResetPasswordPage'
 import { SettingsPage } from '../ui/pages/SettingsPage'
 import TechnicalAnalysisPage from '../ui/pages/TechnicalAnalysisPage'
 import { TransactionsPage } from '../ui/pages/TransactionsPage'
+import { AuthCallbackPage } from '../ui/pages/AuthCallbackPage'
 
 export const router = createBrowserRouter([
   { path: '/', element: <LandingPage /> },
@@ -20,6 +21,7 @@ export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
   { path: '/reset-password', element: <ResetPasswordPage /> },
+  { path: '/auth/callback', element: <AuthCallbackPage /> },
   {
     path: '/app',
     element: (

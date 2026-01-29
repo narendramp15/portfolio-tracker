@@ -8,11 +8,14 @@ A modern Python FastAPI application for tracking and managing investment portfol
 - 💼 **Portfolio Management** - Create, organize, and manage multiple investment portfolios
 - 💰 **Asset Tracking** - Monitor your investments with detailed asset information
 - 📈 **Performance Analytics** - Analyze gain/loss metrics and portfolio performance
+- � **Google OAuth** - Secure sign-in with Google account (one-click authentication)
+- 🔒 **JWT Authentication** - Secure token-based authentication with 30-day sessions
 - 📱 **Responsive Design** - Beautiful sidebar-based UI with mobile-friendly layout
 - 🎨 **Modern UI/UX** - Professional gradient colors, smooth animations, and intuitive navigation
 - 🔌 **RESTful API** - Complete API for programmatic access to all features
 - ⚡ **Built with FastAPI** - Modern async Python web framework
 - 🔒 **Type-Safe** - Full Python 3.13+ type hints and Pydantic validation
+- 🗄️ **PostgreSQL Support** - Production-ready database with Neon/Supabase integration
 
 ## 🎯 UI Features
 
@@ -150,21 +153,37 @@ DATABASE_URL=postgresql://user:password@host:5432/dbname  # Use PostgreSQL for p
 SECRET_KEY=your-secret-key-here  # Generate with: openssl rand -hex 32
 ENCRYPTION_KEY=your-encryption-key  # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 
+# Google OAuth (optional, see GOOGLE_OAUTH_SETUP.md)
+GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GOOGLE_REDIRECT_URI=http://localhost:8000/api/auth/google/callback
+FRONTEND_URL=http://localhost:5173
+
 # Broker API credentials (optional)
 ZERODHA_API_KEY=your_zerodha_api_key
 ZERODHA_API_SECRET=your_zerodha_api_secret
 ZERODHA_REDIRECT_URL=http://localhost:8000/api/broker/zerodha/callback
 ```
 
+### Google OAuth Setup
+
+To enable "Sign in with Google" functionality:
+
+1. Follow the detailed guide in [GOOGLE_OAUTH_SETUP.md](GOOGLE_OAUTH_SETUP.md)
+2. Create OAuth credentials in Google Cloud Console
+3. Add `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI` to your `.env`
+4. Users can then sign in with their Google account (no password required)
+
 ## Usage
 
 ### Web Interface
 
 1. Open http://localhost:8000 in your browser
-2. **Home Dashboard** - View your portfolio statistics and interactive charts
-3. **Portfolios** - Create, view, and manage your investment portfolios
-4. **Transactions** - Track all your buy/sell transactions with advanced filtering
-5. **Dashboard** - Real-time performance metrics with visual analytics
+2. **Sign In/Register** - Create an account or sign in with Google
+3. **Home Dashboard** - View your portfolio statistics and interactive charts
+4. **Portfolios** - Create, view, and manage your investment portfolios
+5. **Transactions** - Track all your buy/sell transactions with advanced filtering
+6. **Dashboard** - Real-time performance metrics with visual analytics
 
 #### UI Navigation
 - Use the **sidebar** on the left to navigate between sections

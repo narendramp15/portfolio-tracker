@@ -1,9 +1,12 @@
 """Authentication API endpoints."""
 
+import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from authlib.integrations.starlette_client import OAuth
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
@@ -14,6 +17,16 @@ from portfolio_tracker.auth import (ACCESS_TOKEN_EXPIRE_MINUTES,
 from portfolio_tracker.database import get_db
 
 router = APIRouter()
+
+# Initialize OAuth client
+oauth = OAuth()
+oauth.register(
+    name='google',
+    client_id=os.getenv('GOOGLE_CLIENT_ID'),
+    client_secret=os.getenv('GOOGLE_CLIENT_SECRET'),
+    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+    client_kwargs={'scope': 'openid email profile'}
+)
 
 
 @router.post("/register", response_model=schemas.Token)
@@ -231,3 +244,85 @@ async def reset_password(
     db.commit()
     
     return {"message": "Password has been reset successfully"}
+
+
+@router.get("/google/login")
+async def google_login(request: Request):
+    """Initiate Google OAuth login."""
+    redirect_uri = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:8000/api/auth/google/callback')
+    return await oauth.google.authorize_redirect(request, redirect_uri)
+
+
+@router.get("/google/callback")
+async def google_callback(request: Request, db: Session = Depends(get_db)):
+    """Handle Google OAuth callback."""
+    try:
+        # Exchange authorization code for access token
+        token = await oauth.google.authorize_access_token(request)
+        
+        # Get user info from Google
+        user_info = token.get('userinfo')
+        if not user_info:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to get user information from Google"
+            )
+        
+        email = user_info.get('email')
+        full_name = user_info.get('name', '')
+        google_id = user_info.get('sub')  # Google's unique user ID
+        
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email not provided by Google"
+            )
+        
+        # Check if user exists
+        user = db.query(models.UserModel).filter(
+            models.UserModel.email == email
+        ).first()
+        
+        if not user:
+            # Create new user with Google OAuth
+            # Generate a random username from email
+            username = email.split('@')[0]
+            base_username = username
+            counter = 1
+            
+            # Ensure username is unique
+            while db.query(models.UserModel).filter(
+                models.UserModel.username == username
+            ).first():
+                username = f"{base_username}{counter}"
+                counter += 1
+            
+            user = models.UserModel(
+                email=email,
+                username=username,
+                full_name=full_name,
+                hashed_password=hash_password(secrets.token_urlsafe(32)),  # Random password for OAuth users
+                is_active=True
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        
+        # Create access token
+        access_token = create_access_token(
+            data={"sub": user.email},
+            expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        )
+        
+        # Redirect to frontend with token
+        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+        return RedirectResponse(
+            url=f"{frontend_url}/auth/callback?token={access_token}"
+        )
+        
+    except Exception as e:
+        # Redirect to login with error
+        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+        return RedirectResponse(
+            url=f"{frontend_url}/login?error=google_auth_failed"
+        )
