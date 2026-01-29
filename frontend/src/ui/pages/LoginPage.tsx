@@ -156,7 +156,9 @@ export function LoginPage() {
           <button
             type="button"
             onClick={() => {
-              window.location.href = '/api/auth/google/login'
+              const backendUrl = import.meta.env.VITE_API_URL || '/api'
+              const baseUrl = backendUrl.replace(/\/api$/, '') // Remove trailing /api if present
+              window.location.href = `${baseUrl}/api/auth/google/login`
             }}
             className="w-full flex items-center justify-center gap-3 rounded-lg border border-blue-500/30 bg-white/10 px-4 py-3 text-sm font-semibold text-white hover:bg-white/20 hover:border-blue-400/50 transition-all duration-200"
           >
