@@ -2,6 +2,7 @@
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.pool import QueuePool
 
 from portfolio_tracker.config import settings
 
@@ -19,11 +20,29 @@ if not settings.TESTING:
         print("⚠️  Using SQLite (local file) - data will be lost on Render/Railway restarts!")
 
 # Create engine with appropriate settings
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False} if settings.is_sqlite() else {},
-    echo=settings.DB_ECHO,
-)
+if settings.is_sqlite():
+    # SQLite settings
+    engine = create_engine(
+        DATABASE_URL,
+        connect_args={"check_same_thread": False},
+        echo=settings.DB_ECHO,
+    )
+else:
+    # PostgreSQL settings with connection pool configuration for Neon
+    # Neon has aggressive connection timeouts, so we need to:
+    # 1. Pre-ping connections to check if they're still alive
+    # 2. Recycle connections frequently
+    # 3. Handle dropped connections gracefully
+    engine = create_engine(
+        DATABASE_URL,
+        echo=settings.DB_ECHO,
+        poolclass=QueuePool,
+        pool_size=5,  # Number of connections to keep in the pool
+        max_overflow=10,  # Additional connections allowed beyond pool_size
+        pool_timeout=30,  # Seconds to wait for a connection from pool
+        pool_recycle=300,  # Recycle connections after 5 minutes (Neon idle timeout)
+        pool_pre_ping=True,  # Check connection validity before using (handles SSL drops)
+    )
 
 # Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
