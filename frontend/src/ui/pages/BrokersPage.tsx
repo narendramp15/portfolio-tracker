@@ -244,7 +244,7 @@ export function BrokersPage() {
             const config = connectedBrokerList.find(c => c.broker_name === broker.key)
             const isConnected = !!config
             const isAuthorized = config?.is_authorized ?? false
-            
+
             // For non-implemented brokers, show "Coming Soon"
             if (!broker.implemented) {
               return (
@@ -264,7 +264,7 @@ export function BrokersPage() {
                 </Card>
               )
             }
-            
+
             const statusText = isConnected
               ? (isAuthorized ? 'Authorized ✓' : 'Needs login')
               : 'Not connected'

@@ -16,39 +16,23 @@ class FivePaisaBroker:
         api_secret: Optional[str] = None,
         user_key: Optional[str] = None,
         encryption_key: Optional[str] = None,
-        app_name: Optional[str] = None,
-        app_source: Optional[str] = None,
-        user_id: Optional[str] = None,
-        password: Optional[str] = None,
     ):
         """
         Initialize 5Paisa broker.
 
-        The 5Paisa API requires either:
-        1. Full credentials (app_name, app_source, user_id, password, user_key, encryption_key)
-        2. OAuth flow with request token
-
-        For simplicity, we store api_key/api_secret and use OAuth flow.
+        Credentials are stored per-user in the database (broker_config table).
+        The api_key is the 5Paisa User Key (VendorKey).
+        The api_secret is the 5Paisa Encryption Key.
 
         Args:
-            api_key: 5Paisa User Key (also called VendorKey)
-            api_secret: 5Paisa Encryption Key
+            api_key: 5Paisa User Key (also called VendorKey) - stored in DB
+            api_secret: 5Paisa Encryption Key - stored in DB
             user_key: Same as api_key (alias for compatibility)
             encryption_key: Same as api_secret (alias for compatibility)
-            app_name: 5Paisa App Name (optional, for credential-based auth)
-            app_source: 5Paisa App Source (optional, for credential-based auth)
-            user_id: 5Paisa User ID (optional, for credential-based auth)
-            password: 5Paisa Password (optional, for credential-based auth)
         """
-        # Support both naming conventions
-        self.user_key = api_key or user_key or os.getenv("5PAISA_API_KEY", "")
-        self.encryption_key = api_secret or encryption_key or os.getenv("5PAISA_API_SECRET", "")
-        
-        # Optional full credential fields
-        self.app_name = app_name or os.getenv("5PAISA_APP_NAME", "")
-        self.app_source = app_source or os.getenv("5PAISA_APP_SOURCE", "")
-        self.user_id = user_id or os.getenv("5PAISA_USER_ID", "")
-        self.password = password or os.getenv("5PAISA_PASSWORD", "")
+        # Support both naming conventions (credentials come from DB, not env)
+        self.user_key = api_key or user_key or ""
+        self.encryption_key = api_secret or encryption_key or ""
         
         if not self.user_key:
             raise ValueError("5Paisa User Key (api_key) not configured")
@@ -63,11 +47,13 @@ class FivePaisaBroker:
             try:
                 from py5paisa import FivePaisaClient
                 
+                # For OAuth flow, we only need USER_KEY and ENCRYPTION_KEY
+                # The other fields can be empty - OAuth handles authentication
                 cred = {
-                    "APP_NAME": self.app_name,
-                    "APP_SOURCE": self.app_source,
-                    "USER_ID": self.user_id,
-                    "PASSWORD": self.password,
+                    "APP_NAME": "",
+                    "APP_SOURCE": "",
+                    "USER_ID": "",
+                    "PASSWORD": "",
                     "USER_KEY": self.user_key,
                     "ENCRYPTION_KEY": self.encryption_key,
                 }
