@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Dict
 
 from sqlalchemy import (Boolean, Column, DateTime, ForeignKey, Index, Integer,
-                        Numeric, String, UniqueConstraint)
+                        Numeric, String, Text, UniqueConstraint)
 from sqlalchemy.orm import relationship
 
 from portfolio_tracker.database import Base
@@ -143,6 +143,7 @@ class BrokerConfigModel(Base):
     api_secret = Column(String(500), nullable=True)  # Encrypted API secret
     access_token = Column(String(500), nullable=True)  # Encrypted access token
     refresh_token = Column(String(500), nullable=True)  # Encrypted refresh token
+    extra_config = Column(Text, nullable=True)  # JSON string for broker-specific config (encrypted)
     is_active = Column(Boolean, default=True, nullable=False)
     last_synced = Column(DateTime, nullable=True)  # Last time holdings were synced
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)

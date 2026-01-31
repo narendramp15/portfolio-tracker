@@ -16,23 +16,37 @@ class FivePaisaBroker:
         api_secret: Optional[str] = None,
         user_key: Optional[str] = None,
         encryption_key: Optional[str] = None,
+        app_name: Optional[str] = None,
+        app_source: Optional[str] = None,
+        user_id: Optional[str] = None,
+        password: Optional[str] = None,
     ):
         """
         Initialize 5Paisa broker.
 
         Credentials are stored per-user in the database (broker_config table).
-        The api_key is the 5Paisa User Key (VendorKey).
-        The api_secret is the 5Paisa Encryption Key.
+        All 6 credentials are required for full API access:
+        - USER_KEY (VendorKey) - stored as api_key
+        - ENCRYPTION_KEY - stored as api_secret
+        - APP_NAME, APP_SOURCE, USER_ID, PASSWORD - stored in extra_config JSON
 
         Args:
-            api_key: 5Paisa User Key (also called VendorKey) - stored in DB
-            api_secret: 5Paisa Encryption Key - stored in DB
-            user_key: Same as api_key (alias for compatibility)
-            encryption_key: Same as api_secret (alias for compatibility)
+            api_key: 5Paisa User Key (also called VendorKey)
+            api_secret: 5Paisa Encryption Key
+            user_key: Same as api_key (alias)
+            encryption_key: Same as api_secret (alias)
+            app_name: 5Paisa App Name
+            app_source: 5Paisa App Source
+            user_id: 5Paisa User ID
+            password: 5Paisa Password
         """
-        # Support both naming conventions (credentials come from DB, not env)
+        # Support both naming conventions
         self.user_key = api_key or user_key or ""
         self.encryption_key = api_secret or encryption_key or ""
+        self.app_name = app_name or ""
+        self.app_source = app_source or ""
+        self.user_id = user_id or ""
+        self.password = password or ""
         
         if not self.user_key:
             raise ValueError("5Paisa User Key (api_key) not configured")
@@ -47,13 +61,12 @@ class FivePaisaBroker:
             try:
                 from py5paisa import FivePaisaClient
 
-                # For OAuth flow, we only need USER_KEY and ENCRYPTION_KEY
-                # The other fields can be empty - OAuth handles authentication
+                # All 6 credentials for full API access
                 cred = {
-                    "APP_NAME": "",
-                    "APP_SOURCE": "",
-                    "USER_ID": "",
-                    "PASSWORD": "",
+                    "APP_NAME": self.app_name,
+                    "APP_SOURCE": self.app_source,
+                    "USER_ID": self.user_id,
+                    "PASSWORD": self.password,
                     "USER_KEY": self.user_key,
                     "ENCRYPTION_KEY": self.encryption_key,
                 }
@@ -96,8 +109,8 @@ class FivePaisaBroker:
         Returns:
             Access token for subsequent API calls
         """
-        import json
         import base64
+        import json
         import logging
         
         logger = logging.getLogger(__name__)
@@ -146,13 +159,36 @@ class FivePaisaBroker:
             access_token: 5Paisa access token
             client_code: 5Paisa client code (optional)
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         self.access_token = access_token
         self.client_code = client_code
+        
+        # If client_code not provided, try to extract from JWT
+        if not client_code and access_token:
+            try:
+                import base64
+                import json
+                parts = access_token.split('.')
+                if len(parts) >= 2:
+                    payload = parts[1]
+                    padding = 4 - len(payload) % 4
+                    if padding != 4:
+                        payload += '=' * padding
+                    decoded = base64.urlsafe_b64decode(payload)
+                    claims = json.loads(decoded)
+                    self.client_code = claims.get('unique_name', '')
+                    logger.info(f"5Paisa: Extracted client_code={self.client_code} from stored token")
+            except Exception as e:
+                logger.warning(f"5Paisa: Failed to extract client_code from token: {e}")
+        
         client = self._get_client()
-        if client_code:
-            client.set_access_token(access_token, client_code)
+        if self.client_code:
+            logger.info(f"5Paisa: Setting access token with client_code={self.client_code}")
+            client.set_access_token(access_token, self.client_code)
         else:
-            # Try to set without client code
+            logger.warning("5Paisa: No client_code available, set_access_token may fail")
             client.set_access_token(access_token, "")
 
     def get_holdings(self) -> List[BrokerHolding]:
@@ -162,12 +198,21 @@ class FivePaisaBroker:
         Returns:
             List of BrokerHolding objects
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         if not self.access_token:
             raise ValueError("Access token not set. Please complete OAuth flow first.")
         
         try:
             client = self._get_client()
+            logger.info(f"5Paisa: Fetching holdings with client_code={self.client_code}, token_len={len(self.access_token)}")
             holdings_data = client.holdings()
+            logger.info(f"5Paisa: Holdings response: {holdings_data}")
+            
+            # SDK returns None on auth errors (401) - need to re-login
+            if holdings_data is None:
+                raise ValueError("5Paisa session expired. Please click 'Login' to re-authorize.")
             
             if not holdings_data:
                 return []
@@ -209,6 +254,9 @@ class FivePaisaBroker:
             
             return holdings
         except Exception as e:
+            error_msg = str(e).lower()
+            if "401" in error_msg or "unauthorized" in error_msg:
+                raise ValueError("5Paisa session expired. Please re-authorize by clicking 'Login' again.")
             raise ValueError(f"Failed to fetch holdings: {str(e)}")
 
     def get_profile(self) -> dict:

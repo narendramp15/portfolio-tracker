@@ -30,6 +30,13 @@ export function BrokerSetupForm({ brokerType, brokerName, onSuccess }: BrokerSet
     const [error, setError] = useState<string | null>(null)
     const [apiKey, setApiKey] = useState('')
     const [apiSecret, setApiSecret] = useState('')
+    // Additional 5Paisa fields
+    const [appName, setAppName] = useState('')
+    const [appSource, setAppSource] = useState('')
+    const [userId5p, setUserId5p] = useState('')
+    const [password5p, setPassword5p] = useState('')
+
+    const isFivePaisa = brokerType === 'fivepaisa'
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault()
@@ -37,22 +44,38 @@ export function BrokerSetupForm({ brokerType, brokerName, onSuccess }: BrokerSet
         setIsLoading(true)
 
         try {
-            const response = await api.post(`/broker/${brokerType}/setup`, undefined, {
-                params: {
+            // Build params based on broker type
+            const params: Record<string, string> = isFivePaisa
+                ? {
+                    user_key: apiKey,
+                    encryption_key: apiSecret,
+                    app_name: appName,
+                    app_source: appSource,
+                    user_id_5p: userId5p,
+                    password: password5p,
+                }
+                : {
                     api_key: apiKey,
                     api_secret: apiSecret,
-                },
-            })
+                }
+
+            const response = await api.post(`/broker/${brokerType}/setup`, undefined, { params })
 
             if (response.data.success) {
                 const loginUrl = response.data.login_url as string | undefined
 
+                // Reset all fields
                 setApiKey('')
                 setApiSecret('')
+                setAppName('')
+                setAppSource('')
+                setUserId5p('')
+                setPassword5p('')
                 setIsOpen(false)
                 onSuccess?.()
 
-                if (brokerType === 'zerodha' && loginUrl) {
+                // Redirect for OAuth login
+                if (loginUrl) {
                     window.location.href = loginUrl
                 }
             }
@@ -76,7 +99,7 @@ export function BrokerSetupForm({ brokerType, brokerName, onSuccess }: BrokerSet
     }
 
     return (
-        <Card className="fixed inset-0 m-auto h-fit max-w-md">
+        <Card className="fixed inset-0 m-auto h-fit max-w-md z-50 overflow-y-auto max-h-[90vh]">
             <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                     <span className="text-2xl">{brokerIcons[brokerType]}</span>
@@ -95,12 +118,14 @@ export function BrokerSetupForm({ brokerType, brokerName, onSuccess }: BrokerSet
 
             <form onSubmit={handleSubmit} className="space-y-3">
                 <div>
-                    <label className="block text-xs font-semibold text-muted mb-1">API Key</label>
+                    <label className="block text-xs font-semibold text-muted mb-1">
+                        {isFivePaisa ? 'User Key (Vendor Key)' : 'API Key'}
+                    </label>
                     <input
                         type="password"
                         value={apiKey}
                         onChange={(e) => setApiKey(e.target.value)}
-                        placeholder="Enter your API key"
+                        placeholder={isFivePaisa ? 'Enter your User Key' : 'Enter your API key'}
                         className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text placeholder-muted focus:border-primary focus:outline-none"
                         required
                         disabled={isLoading}
@@ -108,17 +133,80 @@ export function BrokerSetupForm({ brokerType, brokerName, onSuccess }: BrokerSet
                 </div>
 
                 <div>
-                    <label className="block text-xs font-semibold text-muted mb-1">API Secret</label>
+                    <label className="block text-xs font-semibold text-muted mb-1">
+                        {isFivePaisa ? 'Encryption Key' : 'API Secret'}
+                    </label>
                     <input
                         type="password"
                         value={apiSecret}
                         onChange={(e) => setApiSecret(e.target.value)}
-                        placeholder="Enter your API secret"
+                        placeholder={isFivePaisa ? 'Enter your Encryption Key' : 'Enter your API secret'}
                         className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text placeholder-muted focus:border-primary focus:outline-none"
                         required
                         disabled={isLoading}
                     />
                 </div>
+
+                {/* Additional 5Paisa fields */}
+                {isFivePaisa && (
+                    <>
+                        <div>
+                            <label className="block text-xs font-semibold text-muted mb-1">App Name</label>
+                            <input
+                                type="text"
+                                value={appName}
+                                onChange={(e) => setAppName(e.target.value)}
+                                placeholder="Enter your App Name"
+                                className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text placeholder-muted focus:border-primary focus:outline-none"
+                                required
+                                disabled={isLoading}
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-semibold text-muted mb-1">App Source</label>
+                            <input
+                                type="text"
+                                value={appSource}
+                                onChange={(e) => setAppSource(e.target.value)}
+                                placeholder="Enter your App Source (number)"
+                                className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text placeholder-muted focus:border-primary focus:outline-none"
+                                required
+                                disabled={isLoading}
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-semibold text-muted mb-1">5Paisa User ID</label>
+                            <input
+                                type="text"
+                                value={userId5p}
+                                onChange={(e) => setUserId5p(e.target.value)}
+                                placeholder="Enter your 5Paisa User ID"
+                                className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text placeholder-muted focus:border-primary focus:outline-none"
+                                required
+                                disabled={isLoading}
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-semibold text-muted mb-1">5Paisa Password</label>
+                            <input
+                                type="password"
+                                value={password5p}
+                                onChange={(e) => setPassword5p(e.target.value)}
+                                placeholder="Enter your 5Paisa Password"
+                                className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text placeholder-muted focus:border-primary focus:outline-none"
+                                required
+                                disabled={isLoading}
+                            />
+                        </div>
+
+                        <p className="text-xs text-muted bg-surface/50 p-2 rounded-lg">
+                            💡 You can find these credentials in your 5Paisa Developer Console under API Keys section.
+                        </p>
+                    </>
+                )}
 
                 {error && <div className="rounded-lg bg-danger/15 px-3 py-2 text-xs text-danger">{error}</div>}
 

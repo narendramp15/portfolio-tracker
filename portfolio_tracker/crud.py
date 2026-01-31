@@ -300,6 +300,7 @@ def create_broker_config(
     refresh_token: str | None = None,
     api_key: str | None = None,
     api_secret: str | None = None,
+    extra_config: str | None = None,
 ):
     """Create a new broker configuration."""
     from portfolio_tracker.models import BrokerConfigModel
@@ -312,6 +313,7 @@ def create_broker_config(
         refresh_token=refresh_token,
         api_key=api_key,
         api_secret=api_secret,
+        extra_config=extra_config,
     )
     db.add(config)
     db.commit()
@@ -327,6 +329,7 @@ def update_broker_config(
     api_key: str | None = None,
     api_secret: str | None = None,
     broker_user_id: str | None = None,
+    extra_config: str | None = None,
     last_synced = None,
 ):
     """Update broker configuration tokens."""
@@ -348,6 +351,8 @@ def update_broker_config(
         config.api_secret = api_secret
     if broker_user_id:
         config.broker_user_id = broker_user_id
+    if extra_config:
+        config.extra_config = extra_config
     if last_synced:
         config.last_synced = last_synced
     else:

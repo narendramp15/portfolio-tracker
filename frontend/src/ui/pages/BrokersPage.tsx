@@ -128,17 +128,24 @@ export function BrokersPage() {
   })
 
   useEffect(() => {
-    // Handle Zerodha callback (uses request_token)
+    // Check for request_token in URL (used by both Zerodha and 5Paisa)
     const requestToken = searchParams.get('request_token')
-    if (requestToken) {
-      completeZerodha.mutate(requestToken)
-      return
-    }
-    
-    // Handle 5Paisa callback (uses RequestToken or accessToken)
+
+    // Handle 5Paisa callback - token is a JWT (starts with eyJ)
     const fivepaisaToken = searchParams.get('RequestToken') || searchParams.get('accessToken')
     if (fivepaisaToken) {
       completeFivepaisa.mutate(fivepaisaToken)
+      return
+    }
+
+    if (requestToken) {
+      // 5Paisa tokens are JWTs that start with 'eyJ'
+      if (requestToken.startsWith('eyJ')) {
+        completeFivepaisa.mutate(requestToken)
+      } else {
+        // Zerodha tokens are shorter alphanumeric strings
+        completeZerodha.mutate(requestToken)
+      }
       return
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

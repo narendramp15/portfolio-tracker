@@ -592,41 +592,65 @@ def sync_angel_holdings(
 # 5Paisa Broker Endpoints
 @router.post("/fivepaisa/setup")
 def setup_fivepaisa_broker(
-    api_key: str = Query(...),
-    api_secret: str = Query(...),
+    user_key: str = Query(..., description="5Paisa User Key (VendorKey)"),
+    encryption_key: str = Query(..., description="5Paisa Encryption Key"),
+    app_name: str = Query(..., description="5Paisa App Name"),
+    app_source: str = Query(..., description="5Paisa App Source"),
+    user_id_5p: str = Query(..., description="5Paisa User ID"),
+    password: str = Query(..., description="5Paisa Password"),
     token: Optional[str] = Query(default=None),
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Setup 5Paisa broker with API credentials."""
+    """Setup 5Paisa broker with all required credentials."""
+    import json
+    
     try:
-        from portfolio_tracker.brokers.fivepaisa import FivepaIsaBroker
+        from portfolio_tracker.brokers.fivepaisa import FivePaisaBroker
         
-        user_id = user.id
+        db_user_id = user.id
         
-        # Test the credentials
-        broker = FivepaIsaBroker(api_key=api_key, api_secret=api_secret)
+        # Store extra config as encrypted JSON
+        extra_config = {
+            "app_name": app_name,
+            "app_source": app_source,
+            "user_id": user_id_5p,
+            "password": password,
+        }
+        encrypted_extra = EncryptionManager.encrypt(json.dumps(extra_config))
+        
+        # Test creating the broker (validates credentials format)
+        broker = FivePaisaBroker(
+            api_key=user_key,
+            api_secret=encryption_key,
+            app_name=app_name,
+            app_source=app_source,
+            user_id=user_id_5p,
+            password=password,
+        )
         profile = broker.get_profile()
         
         # Save broker config with encrypted credentials
-        config = crud.get_broker_config_by_broker_name(db, user_id, "fivepaisa")
+        config = crud.get_broker_config_by_broker_name(db, db_user_id, "fivepaisa")
         
         if config:
             config = crud.update_broker_config(
                 db,
                 config.id,
-                api_key=EncryptionManager.encrypt(api_key),
-                api_secret=EncryptionManager.encrypt(api_secret),
-                broker_user_id=profile.get("user_id", "")
+                api_key=EncryptionManager.encrypt(user_key),
+                api_secret=EncryptionManager.encrypt(encryption_key),
+                extra_config=encrypted_extra,
+                broker_user_id=profile.get("user_id", user_id_5p)
             )
         else:
             config = crud.create_broker_config(
                 db,
-                user_id=user_id,
+                user_id=db_user_id,
                 broker_name="fivepaisa",
-                broker_user_id=profile.get("user_id", ""),
-                api_key=EncryptionManager.encrypt(api_key),
-                api_secret=EncryptionManager.encrypt(api_secret)
+                broker_user_id=profile.get("user_id", user_id_5p),
+                api_key=EncryptionManager.encrypt(user_key),
+                api_secret=EncryptionManager.encrypt(encryption_key),
+                extra_config=encrypted_extra,
             )
         
         return {
@@ -647,6 +671,7 @@ def get_fivepaisa_login_url(
     db: Session = Depends(get_db),
 ):
     """Get 5Paisa OAuth login URL."""
+    import json
     try:
         from portfolio_tracker.brokers.fivepaisa import FivePaisaBroker
         
@@ -658,7 +683,23 @@ def get_fivepaisa_login_url(
         api_key = EncryptionManager.decrypt(config.api_key or "")
         api_secret = EncryptionManager.decrypt(config.api_secret or "")
         
-        broker = FivePaisaBroker(api_key=api_key, api_secret=api_secret)
+        # Load extra config for 5Paisa
+        extra = {}
+        if config.extra_config:
+            try:
+                decrypted_extra = EncryptionManager.decrypt(config.extra_config)
+                extra = json.loads(decrypted_extra)
+            except Exception:
+                pass
+        
+        broker = FivePaisaBroker(
+            api_key=api_key,
+            api_secret=api_secret,
+            app_name=extra.get("app_name", ""),
+            app_source=extra.get("app_source", ""),
+            user_id=extra.get("user_id", ""),
+            password=extra.get("password", ""),
+        )
         login_url = broker.get_login_url()
         
         return {"login_url": login_url}
@@ -677,6 +718,7 @@ def fivepaisa_oauth_callback(
     db: Session = Depends(get_db),
 ):
     """Complete 5Paisa OAuth flow with request token."""
+    import json
     import logging
     logger = logging.getLogger(__name__)
     
@@ -691,8 +733,24 @@ def fivepaisa_oauth_callback(
         api_key = EncryptionManager.decrypt(config.api_key or "")
         api_secret = EncryptionManager.decrypt(config.api_secret or "")
         
-        logger.info(f"5Paisa callback: Creating broker with api_key={api_key[:8]}...")
-        broker = FivePaisaBroker(api_key=api_key, api_secret=api_secret)
+        # Load extra config for 5Paisa (app_name, app_source, user_id, password)
+        extra = {}
+        if config.extra_config:
+            try:
+                decrypted_extra = EncryptionManager.decrypt(config.extra_config)
+                extra = json.loads(decrypted_extra)
+            except Exception as e:
+                logger.warning(f"Failed to decrypt extra_config: {e}")
+        
+        logger.info(f"5Paisa callback: Creating broker with all 6 credentials")
+        broker = FivePaisaBroker(
+            api_key=api_key,
+            api_secret=api_secret,
+            app_name=extra.get("app_name", ""),
+            app_source=extra.get("app_source", ""),
+            user_id=extra.get("user_id", ""),
+            password=extra.get("password", ""),
+        )
         
         logger.info(f"5Paisa callback: Calling set_access_token with token length={len(request_token)}")
         access_token = broker.set_access_token(request_token)
@@ -736,6 +794,8 @@ def sync_fivepaisa_holdings(
 ):
     """Sync holdings from 5Paisa to portfolio."""
     try:
+        import json
+
         from portfolio_tracker.brokers.fivepaisa import FivePaisaBroker
         
         user_id = user.id
@@ -759,7 +819,23 @@ def sync_fivepaisa_holdings(
         api_secret = EncryptionManager.decrypt(config.api_secret or "")
         access_token = EncryptionManager.decrypt(config.access_token)
         
-        broker = FivePaisaBroker(api_key=api_key, api_secret=api_secret)
+        # Load extra config for 5Paisa (app_name, app_source, user_id, password)
+        extra = {}
+        if config.extra_config:
+            try:
+                decrypted_extra = EncryptionManager.decrypt(config.extra_config)
+                extra = json.loads(decrypted_extra)
+            except Exception as e:
+                logger.warning(f"Failed to decrypt extra_config: {e}")
+        
+        broker = FivePaisaBroker(
+            api_key=api_key,
+            api_secret=api_secret,
+            app_name=extra.get("app_name", ""),
+            app_source=extra.get("app_source", ""),
+            user_id=extra.get("user_id", ""),
+            password=extra.get("password", ""),
+        )
         broker.set_token(access_token, config.broker_user_id)
         holdings = broker.get_holdings()
         
