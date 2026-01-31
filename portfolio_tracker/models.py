@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Dict
 
-from sqlalchemy import (Boolean, Column, DateTime, ForeignKey, Integer,
-                        Numeric, String, UniqueConstraint, Index)
+from sqlalchemy import (Boolean, Column, DateTime, ForeignKey, Index, Integer,
+                        Numeric, String, UniqueConstraint)
 from sqlalchemy.orm import relationship
 
 from portfolio_tracker.database import Base

@@ -19,7 +19,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
-from portfolio_tracker.models import PriceHistoryModel, AssetModel
+from portfolio_tracker.models import AssetModel, PriceHistoryModel
 
 # Configuration
 PRICE_HISTORY_DAYS = int(os.getenv("PRICE_HISTORY_DAYS", "90"))  # Days to store in DB

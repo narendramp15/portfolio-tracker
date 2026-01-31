@@ -243,7 +243,8 @@ async def get_price_history(
     
     This hybrid approach saves storage on free-tier deployments.
     """
-    from portfolio_tracker.services.price_history import get_price_history_service
+    from portfolio_tracker.services.price_history import \
+        get_price_history_service
     
     service = get_price_history_service(db)
     data = service.get_price_history(symbol, days=days)
@@ -270,7 +271,8 @@ async def backfill_price_history(
     
     Only stores data within retention period (default 90 days) to save space.
     """
-    from portfolio_tracker.services.price_history import get_price_history_service
+    from portfolio_tracker.services.price_history import \
+        get_price_history_service
     
     service = get_price_history_service(db)
     
@@ -303,7 +305,8 @@ async def cleanup_price_history(
     This helps keep storage lean on free-tier deployments.
     Recommended to run daily via cron job.
     """
-    from portfolio_tracker.services.price_history import get_price_history_service
+    from portfolio_tracker.services.price_history import \
+        get_price_history_service
     
     service = get_price_history_service(db)
     deleted = service.cleanup_old_data()
@@ -324,7 +327,8 @@ async def get_price_history_stats(
     
     Useful for monitoring storage usage on free-tier deployments.
     """
-    from portfolio_tracker.services.price_history import get_price_history_service
+    from portfolio_tracker.services.price_history import \
+        get_price_history_service
     
     service = get_price_history_service(db)
     stats = service.get_storage_stats()
