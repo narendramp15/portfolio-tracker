@@ -185,13 +185,10 @@ class FivePaisaBroker:
             if self.client_code:
                 return {"user_id": self.client_code, "name": f"5Paisa User ({self.client_code})"}
             
-            # Try to get profile from client
-            client = self._get_client()
-            
             # 5Paisa doesn't have a direct profile endpoint in the SDK
-            # Return basic info based on credentials
+            # Return basic info based on credentials (masked user key)
             return {
-                "user_id": self.user_id or self.user_key[:8] + "...",
+                "user_id": self.user_key[:8] + "..." if self.user_key else "unknown",
                 "name": "5Paisa User"
             }
         except Exception as e:
