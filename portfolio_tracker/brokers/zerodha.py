@@ -37,6 +37,10 @@ class ZerodhaBroker:
             Login URL for user to authorize the app
         """
         redirect_url = os.getenv("ZERODHA_REDIRECT_URL", "http://localhost:8000/app/brokers")
+        # Use FRONTEND_URL if ZERODHA_REDIRECT_URL is not explicitly set
+        frontend_url = os.getenv("FRONTEND_URL")
+        if not os.getenv("ZERODHA_REDIRECT_URL") and frontend_url:
+            redirect_url = f"{frontend_url}/app/brokers"
         if redirect_url:
             self.kite.redirect_url = redirect_url
         return self.kite.login_url()

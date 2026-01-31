@@ -230,6 +230,7 @@ class BrokerConfigResponse(BrokerConfigBase):
     id: int
     user_id: int
     is_active: bool
+    is_authorized: bool = Field(default=False, description="Whether the broker has a valid access token")
     last_synced: Optional[datetime]
     created_at: datetime
     updated_at: datetime

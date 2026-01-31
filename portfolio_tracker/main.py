@@ -122,6 +122,9 @@ _app.add_middleware(
 # This is the outermost layer that will catch OPTIONS before anything else can reject it
 app = CORSPreflightMiddleware(_app)
 
+# Expose the FastAPI app for testing (tests need dependency_overrides)
+fastapi_app = _app
+
 # Mount static files on the inner app
 static_path = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(static_path):

@@ -48,8 +48,8 @@ def override_get_db():
 @pytest.fixture(scope="session")
 def app():
     """Create FastAPI app with test database."""
-    # Import app first
-    from portfolio_tracker.main import app as _app
+    # Import the FastAPI app (not the ASGI wrapper) for testing
+    from portfolio_tracker.main import fastapi_app as _app
 
     # Override database dependency to ensure it uses test engine
     _app.dependency_overrides[database.get_db] = override_get_db

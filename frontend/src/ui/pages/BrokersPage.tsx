@@ -15,6 +15,7 @@ type BrokerConfig = {
   broker_name: string
   broker_user_id: string
   is_active: boolean
+  is_authorized: boolean
   last_synced?: string | null
 }
 
@@ -91,7 +92,6 @@ export function BrokersPage() {
     },
   })
 
-  const connectedBrokers = new Set(query.data?.map((c) => c.broker_name) ?? [])
   const connectedBrokerList = query.data ?? []
 
   useEffect(() => {
@@ -239,15 +239,23 @@ export function BrokersPage() {
         <h2 className="text-sm font-semibold mb-3 text-muted">Connect a Broker</h2>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           {brokers.map((broker) => {
-            const isConnected = connectedBrokers.has(broker.key)
+            const config = connectedBrokerList.find(c => c.broker_name === broker.key)
+            const isConnected = !!config
+            const isAuthorized = config?.is_authorized ?? false
+            const statusText = isConnected
+              ? (isAuthorized ? 'Authorized ✓' : 'Needs login')
+              : 'Not connected'
+            const statusColor = isConnected
+              ? (isAuthorized ? 'text-green-500' : 'text-amber-500')
+              : 'text-muted'
             return (
-              <Card key={broker.key} className={isConnected ? 'opacity-50' : ''}>
+              <Card key={broker.key} className={isConnected && isAuthorized ? 'opacity-50' : ''}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-2xl">{broker.icon}</span>
                     <div>
                       <div className="font-semibold text-sm">{broker.name}</div>
-                      <div className="text-xs text-muted">{isConnected ? 'Connected' : 'Not connected'}</div>
+                      <div className={`text-xs ${statusColor}`}>{statusText}</div>
                     </div>
                   </div>
                   {!isConnected && (
@@ -256,6 +264,21 @@ export function BrokersPage() {
                       brokerName={broker.name}
                       onSuccess={() => queryClient.invalidateQueries({ queryKey: ['brokers', 'configs'] })}
                     />
+                  )}
+                  {isConnected && !isAuthorized && broker.key === 'zerodha' && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          const { data } = await api.get<{ login_url: string }>('/broker/zerodha/login-url')
+                          window.location.href = data.login_url
+                        } catch (err) {
+                          console.error('Failed to get login URL:', err)
+                        }
+                      }}
+                      className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 px-4 py-2 text-sm font-bold text-white hover:shadow-lg transition-all"
+                    >
+                      Login to Zerodha
+                    </button>
                   )}
                 </div>
               </Card>

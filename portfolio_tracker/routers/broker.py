@@ -178,7 +178,22 @@ def get_broker_configs(
     """Get all broker configurations for current user."""
     try:
         configs = crud.get_broker_configs_by_user(db, user.id)
-        return configs
+        # Add is_authorized field based on whether access_token exists
+        result = []
+        for config in configs:
+            config_dict = {
+                "id": config.id,
+                "user_id": config.user_id,
+                "broker_name": config.broker_name,
+                "broker_user_id": config.broker_user_id or "",
+                "is_active": config.is_active,
+                "is_authorized": bool(config.access_token),  # True if access token exists
+                "last_synced": config.last_synced,
+                "created_at": config.created_at,
+                "updated_at": config.updated_at,
+            }
+            result.append(schemas.BrokerConfigResponse(**config_dict))
+        return result
     except HTTPException:
         raise
     except Exception as e:
