@@ -594,3 +594,79 @@ These items are derived from reviewing the current FastAPI + React implementatio
 **Last Updated:** January 27, 2026  
 **Maintained By:** QuantLeap Team  
 **Next Review:** End of Month 1
+
+If you want to make it even better:
+
+Database of all NSE/BSE stocks (use CSV import from NSE website)
+BSE stock support (.BO suffix)
+Crypto support (Bitcoin, Ethereum via Yahoo Finance)
+Real-time WebSocket prices (live updates without refresh)
+Historical price charts in search results
+Fuzzy search (misspelling tolerance)
+Your holdings system is now professional-grade with symbol validation and live pricing! 🎉
+
+
+You have solid foundations—auth, portfolio CRUD, Zerodha integration, and a polished React UI. However, critical gaps prevent monetization.
+
+🔴 IMMEDIATE NEEDS (Why Would Anyone Use This?)
+The Hard Truth
+Competitors like INDmoney, Kuvera, Groww, Smallcase already offer:
+
+✅ Free portfolio tracking
+✅ Multiple broker syncs
+✅ Tax reports
+✅ Mutual fund support
+Your Unique Selling Points (USPs) to Emphasize:
+USP	Why It Matters
+Technical Analysis Dashboard	INDmoney/Kuvera don't have RSI/MACD charts—but yours is simulated, not real
+AI Buy/Sell Recommendations	Unique! But currently returns random data
+Self-Hostable/Privacy-First	Appeal to developers who don't trust 3rd parties with portfolio data
+Real Zerodha OAuth	Automatic sync (not CSV import)—this is legitimately valuable
+Bottom Line: Your differentiator is technical analysis + AI recommendations, but they're fake. Fix this first.
+
+📋 Prioritized Roadmap
+🔴 HIGH PRIORITY (Do First—Before Any Launch)
+#	Task	Why It's Critical
+1	Real Technical Indicators	Your USP is fake. Use yfinance historical data to calculate actual RSI/MACD/Bollinger Bands
+2	Historical Price Storage	Without price_history table, charts are meaningless. Store daily closes.
+3	Fix "Today's Change"	Dashboard shows ₹0 for today's change—embarrassing for a finance app
+4	Remove or Complete Angel/5Paisa	They show in UI but return empty data—looks broken
+5	Price Alerts	Every competitor has this. Add email/push notifications when stock hits target
+🟡 MEDIUM PRIORITY (Before Monetization)
+#	Task	Why It Matters
+6	Tax Reports (STCG/LTCG)	India-specific pain point. Calculate based on holding period (< 1yr = STCG). Major selling point.
+7	FIFO Cost Basis	Current P&L assumes LIFO—inaccurate for tax purposes
+8	Billing System (Razorpay)	Can't monetize without payments
+9	Feature Gating	Free tier vs Pro tier (e.g., alerts and tax reports = paid)
+10	Dividend Tracking	Sync dividends from Zerodha trades
+🟢 LOW PRIORITY (Growth Features)
+#	Task	Impact
+11	Mutual Fund Support	Expand addressable market
+12	Stock Screener	P/E, ROE filters
+13	Goal-Based Investing	"Retire at 50" calculators
+14	Portfolio Sharing	Social proof, virality
+15	Mobile App	React Native wrapper
+💡 Monetization Models
+Recommended: Freemium
+Tier	Features	Price
+Free	Portfolio tracking, manual entry, basic charts	₹0
+Pro	Broker sync, price alerts, technical analysis, tax reports	₹199/mo or ₹1,499/yr
+Pro+	AI recommendations, API access, priority support	₹499/mo
+Alternative: One-Time Tax Report
+Charge ₹299-499 for annual capital gains statement (high demand during tax season).
+
+🏁 Suggested 4-Week Sprint
+Week	Focus	Deliverables
+1	Fix Core Data	Real technical indicators, price history table, today's change
+2	Alerts + Tax	Price alerts with email, basic STCG/LTCG calculation
+3	Broker Polish	Complete Angel integration OR remove it, improve Zerodha error handling
+4	Monetization	Razorpay integration, subscription tiers, feature gating
+🎯 Your Positioning Statement
+"The only portfolio tracker for Indian investors with built-in technical analysis and AI-powered buy/sell signals—sync your Zerodha in one click."
+
+This differentiates you from:
+
+INDmoney (no technical analysis)
+Kuvera (MF-focused, no broker sync)
+Smallcase (curated portfolios, not tracking)
+Would you like me to start implementing any of these priorities? I'd recommend beginning with real technical indicators since that's your main differentiator.

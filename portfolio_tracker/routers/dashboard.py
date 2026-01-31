@@ -78,10 +78,26 @@ async def get_dashboard_stats(
     # Diversification score (unique symbols)
     diversification_score = len(set(asset.symbol for asset in all_assets))
     
-    # Today's change (placeholder - would need historical data for real implementation)
-    # For now, calculate a rough estimate based on recent price movements
+    # Today's change - calculated from previous_close if available
     today_change = Decimal("0")
-    today_change_percentage = Decimal("0")
+    total_previous_value = Decimal("0")
+    
+    for asset in all_assets:
+        quantity = Decimal(str(asset.quantity))
+        current_price = Decimal(str(asset.current_price))
+        
+        if asset.previous_close:
+            previous_close = Decimal(str(asset.previous_close))
+            # Today's change = (current_price - previous_close) * quantity
+            asset_change = (current_price - previous_close) * quantity
+            today_change += asset_change
+            total_previous_value += previous_close * quantity
+    
+    # Calculate percentage based on total previous value
+    if total_previous_value > 0:
+        today_change_percentage = (today_change / total_previous_value) * Decimal("100")
+    else:
+        today_change_percentage = Decimal("0")
     
     return {
         "total_portfolio_value": float(total_portfolio_value),

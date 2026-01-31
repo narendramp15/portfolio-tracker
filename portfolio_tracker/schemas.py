@@ -87,15 +87,15 @@ class GrowthDataPoint(BaseModel):
 class AssetBase(BaseModel):
     """Base asset schema."""
 
-    symbol: str = Field(..., min_length=1, max_length=10)
-    name: str = Field(..., min_length=1, max_length=100)
-    quantity: Decimal = Field(..., gt=0)
-    current_price: Decimal = Field(..., gt=0)
-    purchase_price: Decimal = Field(..., gt=0)
+    symbol: str = Field(..., min_length=1, max_length=20, description="Stock symbol (e.g., RELIANCE.NS)")
+    name: Optional[str] = Field(None, max_length=100, description="Company name (auto-filled if not provided)")
+    quantity: Decimal = Field(..., gt=0, description="Number of shares")
+    current_price: Optional[Decimal] = Field(None, gt=0, description="Current market price (auto-fetched if not provided)")
+    purchase_price: Decimal = Field(..., gt=0, description="Average purchase price per share")
 
 
 class AssetCreate(AssetBase):
-    """Schema for creating an asset."""
+    """Schema for creating an asset with symbol validation."""
 
     pass
 
@@ -113,6 +113,7 @@ class Asset(AssetBase):
 
     id: int
     portfolio_id: int
+    previous_close: Optional[Decimal] = None
     created_at: datetime
     updated_at: datetime
 
@@ -259,13 +260,16 @@ class BrokerSyncResponse(BaseModel):
 
 # Technical Analysis Schemas
 class TechnicalIndicators(BaseModel):
-    """Schema for technical indicators."""
+    """Schema for technical indicators calculated from real historical data."""
 
-    rsi: float
-    macd: dict
-    moving_averages: dict
-    bollinger_bands: dict
-    volume: dict
+    rsi: float  # 0-100, Relative Strength Index
+    macd: dict  # value, signal, histogram
+    moving_averages: dict  # sma_20, sma_50, sma_200
+    bollinger_bands: dict  # upper, middle, lower, width
+    volume: dict  # trend, average, current, ratio
+    price_position: Optional[str] = None  # Position relative to Bollinger Bands
+    data_points: Optional[int] = None  # Number of historical data points used
+    last_updated: Optional[str] = None  # ISO timestamp of calculation
 
 
 class TechnicalAnalysis(BaseModel):

@@ -1,9 +1,10 @@
 """Encryption utilities for sensitive data like API credentials."""
 
-import os
 from typing import Optional
 
 from cryptography.fernet import Fernet
+
+from portfolio_tracker.config import settings
 
 
 class EncryptionManager:
@@ -13,13 +14,14 @@ class EncryptionManager:
 
     @classmethod
     def _get_cipher(cls) -> Fernet:
-        """Get or create the cipher instance using the encryption key from environment."""
+        """Get or create the cipher instance using the encryption key from config."""
         if cls._cipher is None:
-            key = os.getenv("ENCRYPTION_KEY")
+            key = settings.ENCRYPTION_KEY
             if not key:
                 # Generate a default key (WARNING: Use a proper key in production)
                 key = Fernet.generate_key().decode()
-                print("WARNING: Using generated encryption key. Set ENCRYPTION_KEY in .env for persistence.")
+                if not settings.TESTING:
+                    print("WARNING: Using generated encryption key. Set ENCRYPTION_KEY in .env for persistence.")
             
             try:
                 cls._cipher = Fernet(key.encode() if isinstance(key, str) else key)

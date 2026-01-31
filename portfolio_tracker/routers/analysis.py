@@ -1,156 +1,210 @@
-"""Technical analysis and AI recommendation API endpoints."""
+"""Technical analysis and AI recommendation API endpoints.
 
-import random
+This module provides real technical analysis using historical price data from Yahoo Finance.
+Indicators calculated:
+- RSI (Relative Strength Index) - Momentum oscillator (0-100)
+- MACD (Moving Average Convergence Divergence) - Trend following
+- Bollinger Bands - Volatility indicator
+- Moving Averages (SMA 20, 50, 200) - Trend identification
+- Volume Analysis - Participation strength
+"""
+
+import logging
 from decimal import Decimal
 from typing import List
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from portfolio_tracker import crud, schemas
 from portfolio_tracker.database import get_db
 from portfolio_tracker.deps import get_current_user
 from portfolio_tracker.models import UserModel
+from portfolio_tracker.services.technical_indicators import \
+    technical_indicators_service
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 def calculate_technical_indicators(symbol: str, current_price: float) -> dict:
     """
-    Calculate technical indicators for a given asset.
-    In production, integrate with actual market data APIs (e.g., Alpha Vantage, Yahoo Finance).
+    Calculate real technical indicators for a given asset using historical price data.
+    
+    Args:
+        symbol: Stock ticker symbol (e.g., 'RELIANCE.NS', 'AAPL')
+        current_price: Current market price of the asset
+        
+    Returns:
+        Dictionary containing RSI, MACD, Bollinger Bands, Moving Averages, and Volume analysis
     """
-    # Simulated technical indicators (replace with real API calls)
-    # These would come from historical price data analysis
+    logger.info(f"Calculating technical indicators for {symbol}")
     
-    # RSI (Relative Strength Index) - 0-100 scale
-    rsi = random.uniform(30, 70)
+    # Use the real technical indicators service
+    indicators = technical_indicators_service.get_all_indicators(symbol, current_price)
     
-    # MACD (Moving Average Convergence Divergence)
-    macd_value = random.uniform(-5, 5)
-    macd_signal = random.uniform(-5, 5)
-    macd_histogram = macd_value - macd_signal
-    
-    # Moving Averages
-    sma_20 = current_price * random.uniform(0.95, 1.05)
-    sma_50 = current_price * random.uniform(0.92, 1.08)
-    sma_200 = current_price * random.uniform(0.85, 1.15)
-    
-    # Bollinger Bands
-    bb_upper = current_price * 1.05
-    bb_middle = current_price
-    bb_lower = current_price * 0.95
-    
-    # Volume analysis (simulated)
-    volume_trend = random.choice(['increasing', 'decreasing', 'stable'])
-    avg_volume = random.randint(100000, 10000000)
-    
-    return {
-        'rsi': round(rsi, 2),
-        'macd': {
-            'value': round(macd_value, 2),
-            'signal': round(macd_signal, 2),
-            'histogram': round(macd_histogram, 2)
-        },
-        'moving_averages': {
-            'sma_20': round(sma_20, 2),
-            'sma_50': round(sma_50, 2),
-            'sma_200': round(sma_200, 2)
-        },
-        'bollinger_bands': {
-            'upper': round(bb_upper, 2),
-            'middle': round(bb_middle, 2),
-            'lower': round(bb_lower, 2)
-        },
-        'volume': {
-            'trend': volume_trend,
-            'average': avg_volume
-        }
-    }
+    return indicators
 
 
 def generate_ai_recommendation(symbol: str, name: str, indicators: dict, current_price: float, purchase_price: float) -> dict:
     """
-    Generate AI-powered buy/sell recommendation based on technical indicators.
-    In production, integrate with OpenAI, Anthropic, or custom ML models.
+    Generate AI-powered buy/sell recommendation based on real technical indicators.
+    
+    Analysis includes:
+    - RSI (overbought/oversold conditions)
+    - MACD (momentum and trend direction)
+    - Moving Average alignment (trend confirmation)
+    - Bollinger Band position (volatility and mean reversion)
+    - Volume patterns (participation strength)
+    - Position P&L (risk management)
     """
     signals = []
     bullish_score = 0
     bearish_score = 0
     
-    # RSI Analysis
+    # RSI Analysis (Real data)
     rsi = indicators['rsi']
     if rsi < 30:
-        signals.append("RSI indicates oversold conditions - potential buying opportunity")
+        signals.append(f"RSI at {rsi:.1f} - oversold territory, potential buying opportunity")
         bullish_score += 2
+    elif rsi < 40:
+        signals.append(f"RSI at {rsi:.1f} - approaching oversold, showing weakness")
+        bullish_score += 1
     elif rsi > 70:
-        signals.append("RSI indicates overbought conditions - consider taking profits")
+        signals.append(f"RSI at {rsi:.1f} - overbought territory, consider taking profits")
         bearish_score += 2
-    elif 40 <= rsi <= 60:
-        signals.append("RSI in neutral zone - no strong directional signal")
-    
-    # MACD Analysis
-    macd_hist = indicators['macd']['histogram']
-    if macd_hist > 0:
-        signals.append("MACD histogram positive - bullish momentum")
+    elif rsi > 60:
+        signals.append(f"RSI at {rsi:.1f} - approaching overbought, showing strength")
         bullish_score += 1
     else:
-        signals.append("MACD histogram negative - bearish momentum")
-        bearish_score += 1
+        signals.append(f"RSI at {rsi:.1f} - neutral momentum")
     
-    # Moving Average Analysis
-    ma = indicators['moving_averages']
-    if current_price > ma['sma_20'] > ma['sma_50']:
-        signals.append("Price above key moving averages - uptrend confirmed")
+    # MACD Analysis (Real data)
+    macd = indicators['macd']
+    macd_hist = macd['histogram']
+    macd_value = macd['value']
+    macd_signal = macd['signal']
+    
+    if macd_hist > 0 and macd_value > macd_signal:
+        signals.append(f"MACD bullish crossover (histogram: {macd_hist:.2f})")
         bullish_score += 2
-    elif current_price < ma['sma_20'] < ma['sma_50']:
-        signals.append("Price below key moving averages - downtrend confirmed")
-        bearish_score += 2
-    
-    # Bollinger Bands Analysis
-    bb = indicators['bollinger_bands']
-    if current_price <= bb['lower']:
-        signals.append("Price at lower Bollinger Band - potential reversal zone")
+    elif macd_hist > 0:
+        signals.append(f"MACD histogram positive ({macd_hist:.2f}) - bullish momentum")
         bullish_score += 1
-    elif current_price >= bb['upper']:
-        signals.append("Price at upper Bollinger Band - resistance area")
+    elif macd_hist < 0 and macd_value < macd_signal:
+        signals.append(f"MACD bearish crossover (histogram: {macd_hist:.2f})")
+        bearish_score += 2
+    else:
+        signals.append(f"MACD histogram negative ({macd_hist:.2f}) - bearish momentum")
         bearish_score += 1
     
-    # Volume Analysis
-    if indicators['volume']['trend'] == 'increasing':
-        signals.append(f"Volume trend: {indicators['volume']['trend']} - strong participation")
+    # Moving Average Analysis (Real data)
+    ma = indicators['moving_averages']
+    sma_20 = ma.get('sma_20')
+    sma_50 = ma.get('sma_50')
+    sma_200 = ma.get('sma_200')
+    
+    if sma_20 and sma_50 and sma_200:
+        if current_price > sma_20 > sma_50 > sma_200:
+            signals.append("Perfect bullish alignment: Price > SMA20 > SMA50 > SMA200")
+            bullish_score += 3
+        elif current_price > sma_20 and current_price > sma_50:
+            signals.append("Price above short and medium-term averages - uptrend")
+            bullish_score += 2
+        elif current_price < sma_20 < sma_50 < sma_200:
+            signals.append("Perfect bearish alignment: Price < SMA20 < SMA50 < SMA200")
+            bearish_score += 3
+        elif current_price < sma_20 and current_price < sma_50:
+            signals.append("Price below short and medium-term averages - downtrend")
+            bearish_score += 2
+        elif sma_50 and current_price > sma_50:
+            signals.append("Price above 50-day SMA - medium-term bullish")
+            bullish_score += 1
+        elif sma_50 and current_price < sma_50:
+            signals.append("Price below 50-day SMA - medium-term bearish")
+            bearish_score += 1
+    elif sma_20:
+        if current_price > sma_20:
+            signals.append(f"Price above 20-day SMA (₹{sma_20:.2f})")
+            bullish_score += 1
+        else:
+            signals.append(f"Price below 20-day SMA (₹{sma_20:.2f})")
+            bearish_score += 1
+    
+    # Bollinger Bands Analysis (Real data)
+    bb = indicators['bollinger_bands']
+    bb_width = bb.get('width', 0)
+    price_position = indicators.get('price_position', 'unknown')
+    
+    if price_position == 'below_lower_band':
+        signals.append(f"Price at lower Bollinger Band - potential bounce zone")
+        bullish_score += 2
+    elif price_position == 'above_upper_band':
+        signals.append(f"Price at upper Bollinger Band - extended, may pull back")
+        bearish_score += 1
+    elif price_position == 'lower_half':
+        signals.append("Price in lower half of Bollinger Bands")
         bullish_score += 1
+    
+    if bb_width > 15:
+        signals.append(f"High volatility (Band width: {bb_width:.1f}%)")
+    elif bb_width < 5:
+        signals.append(f"Low volatility squeeze (Band width: {bb_width:.1f}%) - breakout potential")
+    
+    # Volume Analysis (Real data)
+    volume = indicators['volume']
+    volume_trend = volume.get('trend', 'unknown')
+    volume_ratio = volume.get('ratio', 1.0)
+    
+    if volume_trend == 'increasing' and volume_ratio > 1.5:
+        signals.append(f"Volume surge ({volume_ratio:.1f}x average) - strong participation")
+        bullish_score += 1
+    elif volume_trend == 'increasing':
+        signals.append(f"Volume increasing - building momentum")
+    elif volume_trend == 'decreasing' and volume_ratio < 0.5:
+        signals.append(f"Volume drying up ({volume_ratio:.1f}x average) - weak conviction")
+        bearish_score += 1
     
     # Current Position Analysis
     return_pct = ((current_price - purchase_price) / purchase_price) * 100
-    if return_pct > 20:
-        signals.append(f"Current position up {return_pct:.1f}% - consider partial profit booking")
+    if return_pct > 30:
+        signals.append(f"Position up {return_pct:.1f}% - consider booking partial profits")
         bearish_score += 1
-    elif return_pct < -10:
-        signals.append(f"Current position down {return_pct:.1f}% - evaluate stop-loss levels")
+    elif return_pct > 15:
+        signals.append(f"Position up {return_pct:.1f}% - healthy gain, trail stop-loss")
+    elif return_pct < -15:
+        signals.append(f"Position down {return_pct:.1f}% - review thesis, consider stop-loss")
+        bearish_score += 1
+    elif return_pct < -5:
+        signals.append(f"Position down {return_pct:.1f}% - monitor closely")
     
-    # Determine recommendation
+    # Calculate final recommendation
     total_score = bullish_score - bearish_score
-    if total_score >= 3:
+    
+    # Data quality bonus - more confident with more data
+    data_points = indicators.get('data_points', 0)
+    confidence_base = 50 if data_points < 50 else 60 if data_points < 100 else 65
+    
+    if total_score >= 5:
         recommendation = "strong_buy"
         action_text = "Strong Buy"
-        confidence = min(90, 70 + (total_score * 5))
-    elif total_score >= 1:
+        confidence = min(95, confidence_base + 25 + (total_score * 2))
+    elif total_score >= 2:
         recommendation = "buy"
         action_text = "Buy"
-        confidence = min(80, 65 + (total_score * 5))
-    elif total_score <= -3:
+        confidence = min(85, confidence_base + 15 + (total_score * 3))
+    elif total_score <= -5:
         recommendation = "strong_sell"
         action_text = "Strong Sell"
-        confidence = min(90, 70 + (abs(total_score) * 5))
-    elif total_score <= -1:
+        confidence = min(95, confidence_base + 25 + (abs(total_score) * 2))
+    elif total_score <= -2:
         recommendation = "sell"
         action_text = "Sell"
-        confidence = min(80, 65 + (abs(total_score) * 5))
+        confidence = min(85, confidence_base + 15 + (abs(total_score) * 3))
     else:
         recommendation = "hold"
         action_text = "Hold"
-        confidence = 60
+        confidence = confidence_base + 5
     
     return {
         'recommendation': recommendation,
@@ -168,8 +222,16 @@ async def get_technical_analysis(
     db: Session = Depends(get_db)
 ):
     """
-    Get technical analysis and AI recommendations for all user holdings.
+    Get real technical analysis and AI recommendations for all user holdings.
+    
+    Returns comprehensive technical indicators calculated from historical price data:
+    - RSI (14-period)
+    - MACD (12, 26, 9)
+    - Bollinger Bands (20-period, 2 std dev)
+    - Moving Averages (SMA 20, 50, 200)
+    - Volume analysis
     """
+    logger.info(f"Fetching technical analysis for user {user.id}")
     portfolios = crud.get_portfolios(db, user_id=user.id)
     analysis_results = []
     
@@ -179,10 +241,10 @@ async def get_technical_analysis(
             purchase_price = float(asset.purchase_price)
             quantity = float(asset.quantity)
             
-            # Calculate technical indicators
+            # Calculate REAL technical indicators from historical data
             indicators = calculate_technical_indicators(asset.symbol, current_price)
             
-            # Generate AI recommendation
+            # Generate AI recommendation based on real indicators
             ai_recommendation = generate_ai_recommendation(
                 asset.symbol,
                 asset.name,

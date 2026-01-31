@@ -12,8 +12,8 @@ from portfolio_tracker.brokers.zerodha import ZerodhaBroker
 from portfolio_tracker.database import get_db
 from portfolio_tracker.deps import get_current_user
 from portfolio_tracker.encryption import EncryptionManager
-from portfolio_tracker.models import AssetModel, TransactionModel
-from portfolio_tracker.models import UserModel
+from portfolio_tracker.models import AssetModel, TransactionModel, UserModel
+from portfolio_tracker.services.symbol_mapper import symbol_mapper
 
 router = APIRouter()
 
@@ -250,18 +250,28 @@ def sync_zerodha_holdings(
         # Create or update assets in portfolio
         assets_imported = 0
         for holding in holdings:
+            # Normalize symbol to Yahoo Finance format
+            normalized_symbol = symbol_mapper.normalize_broker_symbol(
+                symbol=holding.symbol,
+                exchange='NSE',  # Zerodha primarily uses NSE
+                isin=holding.isin
+            )
+            
+            # Get company name from Yahoo Finance
+            company_name = symbol_mapper.get_company_name(normalized_symbol) or holding.symbol
+            
             # Check if asset exists
             asset = db.query(AssetModel).filter(
                 AssetModel.portfolio_id == portfolio_id,
-                AssetModel.symbol == holding.symbol
+                AssetModel.symbol == normalized_symbol
             ).first()
             
             if not asset:
                 # Create new asset
                 asset = AssetModel(
                     portfolio_id=portfolio_id,
-                    symbol=holding.symbol,
-                    name=holding.symbol,  # Use symbol as name, can be updated later
+                    symbol=normalized_symbol,
+                    name=company_name,
                     quantity=holding.quantity,
                     current_price=holding.current_price,
                     purchase_price=holding.average_price,
@@ -270,6 +280,7 @@ def sync_zerodha_holdings(
                 assets_imported += 1
             else:
                 # Update existing asset
+                asset.name = company_name  # Update name in case it changed
                 asset.quantity = holding.quantity
                 asset.current_price = holding.current_price
                 asset.purchase_price = holding.average_price
@@ -509,16 +520,26 @@ def sync_angel_holdings(
         # Create or update assets
         assets_imported = 0
         for holding in holdings:
+            # Normalize symbol to Yahoo Finance format
+            normalized_symbol = symbol_mapper.normalize_broker_symbol(
+                symbol=holding.symbol,
+                exchange='NSE',
+                isin=holding.isin
+            )
+            
+            # Get company name from Yahoo Finance
+            company_name = symbol_mapper.get_company_name(normalized_symbol) or holding.symbol
+            
             asset = db.query(AssetModel).filter(
                 AssetModel.portfolio_id == portfolio_id,
-                AssetModel.symbol == holding.symbol
+                AssetModel.symbol == normalized_symbol
             ).first()
             
             if not asset:
                 asset = AssetModel(
                     portfolio_id=portfolio_id,
-                    symbol=holding.symbol,
-                    name=holding.symbol,
+                    symbol=normalized_symbol,
+                    name=company_name,
                     quantity=holding.quantity,
                     current_price=holding.current_price,
                     purchase_price=holding.average_price,
@@ -526,6 +547,7 @@ def sync_angel_holdings(
                 db.add(asset)
                 assets_imported += 1
             else:
+                asset.name = company_name
                 asset.quantity = holding.quantity
                 asset.current_price = holding.current_price
                 asset.purchase_price = holding.average_price
@@ -631,16 +653,26 @@ def sync_fivepaisa_holdings(
         # Create or update assets
         assets_imported = 0
         for holding in holdings:
+            # Normalize symbol to Yahoo Finance format
+            normalized_symbol = symbol_mapper.normalize_broker_symbol(
+                symbol=holding.symbol,
+                exchange='NSE',
+                isin=holding.isin
+            )
+            
+            # Get company name from Yahoo Finance
+            company_name = symbol_mapper.get_company_name(normalized_symbol) or holding.symbol
+            
             asset = db.query(AssetModel).filter(
                 AssetModel.portfolio_id == portfolio_id,
-                AssetModel.symbol == holding.symbol
+                AssetModel.symbol == normalized_symbol
             ).first()
             
             if not asset:
                 asset = AssetModel(
                     portfolio_id=portfolio_id,
-                    symbol=holding.symbol,
-                    name=holding.symbol,
+                    symbol=normalized_symbol,
+                    name=company_name,
                     quantity=holding.quantity,
                     current_price=holding.current_price,
                     purchase_price=holding.average_price,
@@ -648,6 +680,7 @@ def sync_fivepaisa_holdings(
                 db.add(asset)
                 assets_imported += 1
             else:
+                asset.name = company_name
                 asset.quantity = holding.quantity
                 asset.current_price = holding.current_price
                 asset.purchase_price = holding.average_price

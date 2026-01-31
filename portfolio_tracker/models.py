@@ -78,12 +78,14 @@ class AssetModel(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     portfolio_id = Column(Integer, ForeignKey("portfolios.id"), nullable=False, index=True)
-    symbol = Column(String(10), nullable=False, index=True)
+    symbol = Column(String(20), nullable=False, index=True)  # Increased to 20 to support .NS/.BO suffixes
     name = Column(String(100), nullable=False)
     quantity = Column(Numeric(20, 8), nullable=False)
     current_price = Column(Numeric(20, 8), nullable=False)
+    previous_close = Column(Numeric(20, 8), nullable=True)  # Previous day's closing price for today's change
     purchase_price = Column(Numeric(20, 8), nullable=False)
     purchase_date = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    last_price_update = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 

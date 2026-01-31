@@ -1,45 +1,28 @@
 """Database configuration and session management."""
 
-import os
-
-from dotenv import load_dotenv
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 
-load_dotenv()
+from portfolio_tracker.config import settings
 
-# Build DATABASE_URL from individual PostgreSQL env vars if available
-# Otherwise fall back to DATABASE_URL env var or SQLite
-def get_database_url() -> str:
-    """Construct database URL from environment variables."""
-    # Try individual PostgreSQL variables first (Neon/Supabase style)
-    pg_user = os.getenv("PGUSER")
-    pg_password = os.getenv("PGPASSWORD")
-    pg_host = os.getenv("PGHOST")
-    pg_port = os.getenv("PGPORT", "5432")
-    pg_database = os.getenv("PGDATABASE")
-    
-    if all([pg_user, pg_password, pg_host, pg_database]):
-        # Construct PostgreSQL URL from individual components
-        database_url = f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_database}"
-        print(f"✓ Using PostgreSQL database: {pg_database} at {pg_host}")
-        return database_url
-    
-    # Fall back to DATABASE_URL or SQLite
-    database_url = os.getenv("DATABASE_URL", "sqlite:///./portfolio.db")
-    if "sqlite" in database_url:
+# Get database URL from centralized config
+DATABASE_URL = settings.DATABASE_URL
+
+# Log database type (only in non-testing mode to keep test output clean)
+if not settings.TESTING:
+    if settings.is_postgres():
+        import os
+        pg_host = os.getenv("PGHOST", "unknown")
+        pg_db = os.getenv("PGDATABASE", "unknown")
+        print(f"✓ Using PostgreSQL database: {pg_db} at {pg_host}")
+    elif settings.is_sqlite():
         print("⚠️  Using SQLite (local file) - data will be lost on Render/Railway restarts!")
-    else:
-        print(f"✓ Using database from DATABASE_URL")
-    return database_url
 
-DATABASE_URL = get_database_url()
-
-# Create engine
+# Create engine with appropriate settings
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
+    connect_args={"check_same_thread": False} if settings.is_sqlite() else {},
+    echo=settings.DB_ECHO,
 )
 
 # Create session factory

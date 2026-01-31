@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Filter, Search } from 'lucide-react'
+import { Filter, Search, Download } from 'lucide-react'
 
 import { api } from '../../lib/api.ts'
 import { formatCurrencyINR } from '../../lib/format.ts'
@@ -32,6 +32,24 @@ export function TransactionsPage() {
       })
   }, [query.data, type, q])
 
+  const handleExportCSV = async () => {
+    try {
+      const response = await api.get('/transactions/export', { responseType: 'blob' })
+      const blob = new Blob([response.data], { type: 'text/csv' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'all_transactions.csv'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Export failed:', error)
+      alert('Failed to export CSV')
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -60,6 +78,15 @@ export function TransactionsPage() {
               <option value="buy">Buy</option>
               <option value="sell">Sell</option>
             </select>
+            <button
+              type="button"
+              onClick={handleExportCSV}
+              className="inline-flex items-center gap-2 rounded-xl border border-border bg-bg px-4 py-2 text-sm font-semibold hover:bg-surface"
+              title="Export all transactions to CSV"
+            >
+              <Download className="h-4 w-4" />
+              Export CSV
+            </button>
           </div>
         </div>
       </div>

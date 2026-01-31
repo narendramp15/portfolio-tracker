@@ -1,13 +1,77 @@
 """Transactions API endpoints."""
 
+import csv
+from io import StringIO
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+
+from portfolio_tracker import models, schemas
 from portfolio_tracker.database import get_db
-from portfolio_tracker import schemas, models
 from portfolio_tracker.deps import get_current_user
 from portfolio_tracker.models import UserModel
 
 router = APIRouter()
+
+
+@router.get("/export")
+async def export_all_transactions_csv(
+    user: UserModel = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    """Export all transactions across all portfolios to CSV."""
+    transactions = (
+        db.query(models.TransactionModel)
+        .join(models.PortfolioModel, models.TransactionModel.portfolio_id == models.PortfolioModel.id)
+        .filter(models.PortfolioModel.user_id == user.id)
+        .order_by(models.TransactionModel.transaction_date.desc())
+        .all()
+    )
+    
+    # Create CSV in memory
+    output = StringIO()
+    writer = csv.writer(output)
+    
+    # Write headers
+    writer.writerow([
+        'Date',
+        'Portfolio',
+        'Symbol',
+        'Asset Name',
+        'Type',
+        'Quantity',
+        'Price per Unit (₹)',
+        'Total Value (₹)',
+        'Notes'
+    ])
+    
+    # Write data rows
+    for t in transactions:
+        quantity = float(t.quantity)
+        price = float(t.price)
+        total_value = quantity * price
+        
+        writer.writerow([
+            t.transaction_date.strftime('%Y-%m-%d'),
+            t.portfolio.name if t.portfolio else 'Unknown',
+            t.asset.symbol if t.asset else 'N/A',
+            t.asset.name if t.asset else 'Unknown',
+            t.type.upper(),
+            quantity,
+            price,
+            round(total_value, 2),
+            t.notes or ''
+        ])
+    
+    output.seek(0)
+    
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": "attachment; filename=all_transactions.csv"
+        }
+    )
 
 
 @router.get("/")

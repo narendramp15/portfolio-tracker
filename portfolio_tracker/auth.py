@@ -2,18 +2,20 @@
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from passlib.context import CryptContext
+
 from jose import JWTError, jwt
+from passlib.context import CryptContext
 from pydantic import EmailStr
-import os
+
+from portfolio_tracker.config import settings
 
 # Password hashing - using argon2 which is more secure and doesn't have the 72-byte limit
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
-# JWT configuration
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-this-in-production-12345678")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30 * 24 * 60  # 30 days
+# JWT configuration from centralized settings
+SECRET_KEY = settings.SECRET_KEY
+ALGORITHM = settings.ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
 
 def hash_password(password: str) -> str:

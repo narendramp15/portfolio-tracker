@@ -1,6 +1,5 @@
 """Authentication API endpoints."""
 
-import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -14,17 +13,18 @@ from portfolio_tracker import models, schemas
 from portfolio_tracker.auth import (ACCESS_TOKEN_EXPIRE_MINUTES,
                                     create_access_token, decode_access_token,
                                     hash_password, verify_password)
+from portfolio_tracker.config import settings
 from portfolio_tracker.database import get_db
 from portfolio_tracker.deps import get_current_user
 
 router = APIRouter()
 
-# Initialize OAuth client
+# Initialize OAuth client using centralized config
 oauth = OAuth()
 oauth.register(
     name='google',
-    client_id=os.getenv('GOOGLE_CLIENT_ID'),
-    client_secret=os.getenv('GOOGLE_CLIENT_SECRET'),
+    client_id=settings.GOOGLE_CLIENT_ID,
+    client_secret=settings.GOOGLE_CLIENT_SECRET,
     server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
     client_kwargs={'scope': 'openid email profile'}
 )
@@ -227,8 +227,7 @@ async def reset_password(
 @router.get("/google/login")
 async def google_login(request: Request):
     """Initiate Google OAuth login."""
-    redirect_uri = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:8000/api/auth/google/callback')
-    return await oauth.google.authorize_redirect(request, redirect_uri)
+    return await oauth.google.authorize_redirect(request, settings.GOOGLE_REDIRECT_URI)
 
 
 @router.get("/google/callback")
@@ -293,14 +292,17 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         )
         
         # Redirect to frontend with token
-        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173')
         return RedirectResponse(
-            url=f"{frontend_url}/auth/callback?token={access_token}"
+            url=f"{settings.FRONTEND_URL}/auth/callback?token={access_token}"
         )
         
     except Exception as e:
+        # Log the actual error for debugging
+        print(f"Google OAuth error: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
         # Redirect to login with error
-        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173')
         return RedirectResponse(
-            url=f"{frontend_url}/login?error=google_auth_failed"
+            url=f"{settings.FRONTEND_URL}/login?error=google_auth_failed"
         )

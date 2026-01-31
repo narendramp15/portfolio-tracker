@@ -47,6 +47,7 @@ export type Asset = {
   quantity: number | string
   current_price: number | string
   purchase_price: number | string
+  previous_close?: number | string | null
 }
 
 export type Portfolio = {

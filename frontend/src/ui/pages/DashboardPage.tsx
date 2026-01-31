@@ -139,6 +139,7 @@ export function DashboardPage() {
 
   const stats = query.data
   const isUp = stats.total_gain_loss >= 0
+  const todayUp = (stats.today_change ?? 0) >= 0
   const winRate = stats.number_of_assets > 0 ? (stats.winning_assets / stats.number_of_assets) * 100 : 0
 
   return (
@@ -173,7 +174,7 @@ export function DashboardPage() {
           <BarChart3 className="h-4 w-4" />
           Portfolio Performance
         </h2>
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
           <KpiCard label="Total Value" value={formatCurrencyINR(stats.total_portfolio_value)} icon={<Wallet className="h-5 w-5" />} />
           <KpiCard label="Total Invested" value={formatCurrencyINR(stats.total_invested)} icon={<Coins className="h-5 w-5" />} />
           <KpiCard
@@ -186,6 +187,19 @@ export function DashboardPage() {
                 <ArrowUpRight className="h-5 w-5 text-success" />
               ) : (
                 <ArrowDownRight className="h-5 w-5 text-danger" />
+              )
+            }
+          />
+          <KpiCard
+            label="Today's Change"
+            value={formatCurrencyINR(stats.today_change ?? 0)}
+            helper={formatPercent(stats.today_change_percentage ?? 0)}
+            tone={todayUp ? 'success' : 'danger'}
+            icon={
+              todayUp ? (
+                <TrendingUp className="h-5 w-5 text-success" />
+              ) : (
+                <TrendingDown className="h-5 w-5 text-danger" />
               )
             }
           />

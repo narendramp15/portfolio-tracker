@@ -10,9 +10,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
+from portfolio_tracker.config import settings
 from portfolio_tracker.database import create_tables
 from portfolio_tracker.routers import (analysis, auth, broker, dashboard,
-                                       portfolio, transactions)
+                                       market, portfolio, transactions)
 
 # Create tables on startup
 create_tables()
@@ -24,20 +25,17 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Add CORS middleware
-# Get allowed origins from environment, default to all for development
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+# Add CORS middleware using centralized config
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS if ALLOWED_ORIGINS != ["*"] else ["*"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Add Session middleware for OAuth (must be before routes)
-SESSION_SECRET = os.getenv("SECRET_KEY", "your-secret-key-change-this-in-production-12345678")
-app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
+app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 
 # Mount static files
 static_path = os.path.join(os.path.dirname(__file__), "static")
@@ -71,6 +69,7 @@ app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(portfolio.router, prefix="/api/portfolios", tags=["portfolios"])
 app.include_router(transactions.router, prefix="/api/transactions", tags=["transactions"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
+app.include_router(market.router, prefix="/api/market", tags=["market"])
 
 
 # Include routers (backwards-compatible duplicate prefixes)

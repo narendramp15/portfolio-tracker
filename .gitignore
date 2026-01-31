@@ -92,3 +92,8 @@ SUPABASE_SETUP.md
 FRONTEND_BROKER_UPDATE.md
 render.yaml
 RENDER_DEPLOY.md
+sample_portfolio_export.csv
+sample_transactions_export.csv
+uv.lock
+docs/FEATURE_GAPS.md
+docs/START_EARNING.md
