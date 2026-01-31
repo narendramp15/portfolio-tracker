@@ -170,7 +170,7 @@ async def login_page(request: Request):
     return RedirectResponse(url="/docs")
 
 
-@__app.get("/register")
+@_app.get("/register")
 async def register_page(request: Request):
     """Register page."""
     if spa_available():
@@ -179,7 +179,7 @@ async def register_page(request: Request):
 
 
 # Protected pages (authentication required via client-side check)
-@__app.get("/")
+@_app.get("/")
 async def root(request: Request):
     """Root endpoint - serves homepage."""
     if spa_available():
@@ -188,7 +188,7 @@ async def root(request: Request):
     return RedirectResponse(url="/docs")
 
 
-@__app.get("/portfolios")
+@_app.get("/portfolios")
 async def portfolios_page(request: Request):
     """Portfolios page."""
     if spa_available():
@@ -196,7 +196,7 @@ async def portfolios_page(request: Request):
     return RedirectResponse(url="/docs")
 
 
-@__app.get("/dashboard")
+@_app.get("/dashboard")
 async def dashboard_page(request: Request):
     """Dashboard page."""
     if spa_available():
@@ -204,7 +204,7 @@ async def dashboard_page(request: Request):
     return RedirectResponse(url="/docs")
 
 
-@__app.get("/transactions")
+@_app.get("/transactions")
 async def transactions_page(request: Request):
     """Transactions page."""
     if spa_available():
@@ -212,7 +212,7 @@ async def transactions_page(request: Request):
     return RedirectResponse(url="/docs")
 
 
-@__app.get("/broker-settings")
+@_app.get("/broker-settings")
 async def broker_settings_page(request: Request):
     """Broker settings page."""
     if spa_available():
