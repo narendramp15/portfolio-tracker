@@ -164,7 +164,19 @@ class Settings:
         if frontend and frontend not in origin_list:
             origin_list.append(frontend)
         
-        return origin_list
+        # Automatically add www and non-www variants for each origin
+        expanded_origins = set(origin_list)
+        for origin in origin_list:
+            # Add www variant if it's a non-www domain
+            if "://" in origin and not origin.split("://")[1].startswith("www.") and not origin.split("://")[1].startswith("localhost"):
+                www_variant = origin.replace("://", "://www.")
+                expanded_origins.add(www_variant)
+            # Add non-www variant if it's a www domain
+            elif "://www." in origin:
+                non_www_variant = origin.replace("://www.", "://")
+                expanded_origins.add(non_www_variant)
+        
+        return list(expanded_origins)
     
     # ===================
     # Broker Settings
