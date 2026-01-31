@@ -36,11 +36,16 @@ logger.info(f"✓ Google OAuth: {'Configured' if settings.GOOGLE_CLIENT_ID else 
 # Request logging middleware
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        logger.info(f"Incoming: {request.method} {request.url.path} - Origin: {request.headers.get('origin', 'None')}")
+        origin = request.headers.get('origin', 'None')
+        logger.info(f"Incoming: {request.method} {request.url.path} - Origin: {origin}")
         
-        # Log CORS preflight specifically
+        # Log CORS preflight specifically with all relevant headers
         if request.method == "OPTIONS":
-            logger.info(f"CORS Preflight: {request.url.path} from {request.headers.get('origin', 'Unknown')}")
+            logger.info(f"CORS Preflight detected: {request.url.path}")
+            logger.info(f"  Origin: {origin}")
+            logger.info(f"  Access-Control-Request-Method: {request.headers.get('access-control-request-method', 'None')}")
+            logger.info(f"  Access-Control-Request-Headers: {request.headers.get('access-control-request-headers', 'None')}")
+            logger.info(f"  Configured CORS Origins: {settings.CORS_ORIGINS}")
         
         response = await call_next(request)
         
@@ -55,22 +60,26 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Add request logging middleware (runs first)
-app.add_middleware(RequestLoggingMiddleware)
+# MIDDLEWARE ORDER MATTERS!
+# Middleware added first runs LAST in the request chain
+# So order is: SessionMiddleware (runs last) -> RequestLogging -> CORS (runs first)
 
-# Add Session middleware for OAuth (must be added first, runs last in chain)
+# Add Session middleware for OAuth (added first, runs last)
 app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 
-# Add CORS middleware using centralized config
-# This runs before SessionMiddleware in the request chain
-# Must handle preflight OPTIONS requests properly
+# Add request logging middleware (added second, runs middle)
+app.add_middleware(RequestLoggingMiddleware)
+
+# Add CORS middleware (added last, runs FIRST in request chain)
+# This ensures CORS preflight is handled before anything else
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # Allow all methods including OPTIONS
+    allow_headers=["*"],  # Allow all headers including Authorization, Content-Type
     expose_headers=["*"],
+    max_age=3600,  # Cache preflight response for 1 hour
 )
 
 # Mount static files
