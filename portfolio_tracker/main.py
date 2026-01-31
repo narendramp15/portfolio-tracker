@@ -33,19 +33,57 @@ logger.info(f"✓ Frontend URL: {settings.FRONTEND_URL}")
 logger.info(f"✓ Google OAuth: {'Configured' if settings.GOOGLE_CLIENT_ID else 'Not configured'}")
 
 
+# Raw ASGI middleware to handle OPTIONS BEFORE anything else
+# This runs at the lowest level, before SessionMiddleware can reject the request
+class CORSPreflightMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope["method"] == "OPTIONS":
+            # Get origin from headers
+            headers = dict(scope.get("headers", []))
+            origin = headers.get(b"origin", b"").decode("utf-8")
+            
+            logger.info(f"[ASGI] OPTIONS preflight intercepted: {scope['path']}")
+            logger.info(f"[ASGI] Origin: {origin}")
+            logger.info(f"[ASGI] Allowed origins: {settings.CORS_ORIGINS}")
+            
+            # Check if origin is allowed
+            allowed_origin = origin if origin in settings.CORS_ORIGINS else ""
+            if not allowed_origin and "*" in settings.CORS_ORIGINS:
+                allowed_origin = "*"
+            
+            # Send CORS preflight response directly
+            response_headers = [
+                (b"access-control-allow-origin", allowed_origin.encode() if allowed_origin else b""),
+                (b"access-control-allow-methods", b"GET, POST, PUT, DELETE, OPTIONS, PATCH"),
+                (b"access-control-allow-headers", b"authorization, content-type, accept, origin, x-requested-with"),
+                (b"access-control-allow-credentials", b"true"),
+                (b"access-control-max-age", b"3600"),
+                (b"content-length", b"0"),
+            ]
+            
+            await send({
+                "type": "http.response.start",
+                "status": 200 if allowed_origin else 403,
+                "headers": response_headers,
+            })
+            await send({
+                "type": "http.response.body",
+                "body": b"",
+            })
+            logger.info(f"[ASGI] OPTIONS response sent: {200 if allowed_origin else 403}")
+            return
+        
+        await self.app(scope, receive, send)
+
+
 # Request logging middleware
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         origin = request.headers.get('origin', 'None')
         logger.info(f"Incoming: {request.method} {request.url.path} - Origin: {origin}")
-        
-        # Log CORS preflight specifically with all relevant headers
-        if request.method == "OPTIONS":
-            logger.info(f"CORS Preflight detected: {request.url.path}")
-            logger.info(f"  Origin: {origin}")
-            logger.info(f"  Access-Control-Request-Method: {request.headers.get('access-control-request-method', 'None')}")
-            logger.info(f"  Access-Control-Request-Headers: {request.headers.get('access-control-request-headers', 'None')}")
-            logger.info(f"  Configured CORS Origins: {settings.CORS_ORIGINS}")
         
         response = await call_next(request)
         
@@ -54,7 +92,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
 
 # Initialize FastAPI app
-app = FastAPI(
+_app = FastAPI(
     title="Portfolio Tracker",
     description="A modern Python portfolio tracking application",
     version="1.0.0",
@@ -62,30 +100,32 @@ app = FastAPI(
 
 # MIDDLEWARE ORDER MATTERS!
 # Middleware added first runs LAST in the request chain
-# So order is: SessionMiddleware (runs last) -> RequestLogging -> CORS (runs first)
 
 # Add Session middleware for OAuth (added first, runs last)
-app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
+_app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 
 # Add request logging middleware (added second, runs middle)
-app.add_middleware(RequestLoggingMiddleware)
+_app.add_middleware(RequestLoggingMiddleware)
 
-# Add CORS middleware (added last, runs FIRST in request chain)
-# This ensures CORS preflight is handled before anything else
-app.add_middleware(
+# Add CORS middleware (runs before logging and session)
+_app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods including OPTIONS
-    allow_headers=["*"],  # Allow all headers including Authorization, Content-Type
+    allow_methods=["*"],
+    allow_headers=["*"],
     expose_headers=["*"],
-    max_age=3600,  # Cache preflight response for 1 hour
+    max_age=3600,
 )
 
-# Mount static files
+# Wrap with raw ASGI CORS preflight handler (runs FIRST, before any Starlette middleware)
+# This is the outermost layer that will catch OPTIONS before anything else can reject it
+app = CORSPreflightMiddleware(_app)
+
+# Mount static files on the inner app
 static_path = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(static_path):
-    app.mount("/static", StaticFiles(directory=static_path), name="static")
+    _app.mount("/static", StaticFiles(directory=static_path), name="static")
 
 # Setup Jinja2 templates
 templates_path = os.path.join(os.path.dirname(__file__), "templates")
@@ -107,50 +147,22 @@ def serve_spa_index() -> FileResponse:
 
 
 if spa_available() and SPA_ASSETS_DIR.exists():
-    app.mount("/assets", StaticFiles(directory=str(SPA_ASSETS_DIR)), name="spa-assets")
+    _app.mount("/assets", StaticFiles(directory=str(SPA_ASSETS_DIR)), name="spa-assets")
 
 
-# Add explicit CORS preflight handler for debugging
-@app.options("/{full_path:path}")
-async def options_handler(request: Request, full_path: str):
-    """Handle all OPTIONS requests explicitly for CORS preflight debugging."""
-    logger.info(f"Explicit OPTIONS handler called for: /{full_path}")
-    logger.info(f"  Origin: {request.headers.get('origin', 'None')}")
-    logger.info(f"  Request Method: {request.headers.get('access-control-request-method', 'None')}")
-    logger.info(f"  Request Headers: {request.headers.get('access-control-request-headers', 'None')}")
-    
-    from fastapi.responses import Response
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
-            "Access-Control-Allow-Headers": request.headers.get("access-control-request-headers", "*"),
-            "Access-Control-Allow-Credentials": "true",
-            "Access-Control-Max-Age": "3600",
-        }
-    )
-
-
-# Include routers
-app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
-app.include_router(portfolio.router, prefix="/api/portfolios", tags=["portfolios"])
-app.include_router(transactions.router, prefix="/api/transactions", tags=["transactions"])
-app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
-app.include_router(market.router, prefix="/api/market", tags=["market"])
-
-
-# Include routers (backwards-compatible duplicate prefixes)
-app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
-app.include_router(portfolio.router, prefix="/api/portfolio", tags=["portfolio"])
-app.include_router(transactions.router, prefix="/api/transactions", tags=["transactions"])
-app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
-app.include_router(broker.router, prefix="/api/broker", tags=["broker"])
-app.include_router(analysis.router, prefix="/api/analysis", tags=["analysis"])
+# Include routers on the inner FastAPI app
+_app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+_app.include_router(portfolio.router, prefix="/api/portfolios", tags=["portfolios"])
+_app.include_router(transactions.router, prefix="/api/transactions", tags=["transactions"])
+_app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
+_app.include_router(market.router, prefix="/api/market", tags=["market"])
+_app.include_router(portfolio.router, prefix="/api/portfolio", tags=["portfolio"])
+_app.include_router(broker.router, prefix="/api/broker", tags=["broker"])
+_app.include_router(analysis.router, prefix="/api/analysis", tags=["analysis"])
 
 
 # Public pages (no authentication required)
-@app.get("/login")
+@_app.get("/login")
 async def login_page(request: Request):
     """Login page."""
     if spa_available():
@@ -158,7 +170,7 @@ async def login_page(request: Request):
     return RedirectResponse(url="/docs")
 
 
-@app.get("/register")
+@__app.get("/register")
 async def register_page(request: Request):
     """Register page."""
     if spa_available():
@@ -167,7 +179,7 @@ async def register_page(request: Request):
 
 
 # Protected pages (authentication required via client-side check)
-@app.get("/")
+@__app.get("/")
 async def root(request: Request):
     """Root endpoint - serves homepage."""
     if spa_available():
@@ -176,7 +188,7 @@ async def root(request: Request):
     return RedirectResponse(url="/docs")
 
 
-@app.get("/portfolios")
+@__app.get("/portfolios")
 async def portfolios_page(request: Request):
     """Portfolios page."""
     if spa_available():
@@ -184,7 +196,7 @@ async def portfolios_page(request: Request):
     return RedirectResponse(url="/docs")
 
 
-@app.get("/dashboard")
+@__app.get("/dashboard")
 async def dashboard_page(request: Request):
     """Dashboard page."""
     if spa_available():
@@ -192,7 +204,7 @@ async def dashboard_page(request: Request):
     return RedirectResponse(url="/docs")
 
 
-@app.get("/transactions")
+@__app.get("/transactions")
 async def transactions_page(request: Request):
     """Transactions page."""
     if spa_available():
@@ -200,7 +212,7 @@ async def transactions_page(request: Request):
     return RedirectResponse(url="/docs")
 
 
-@app.get("/broker-settings")
+@__app.get("/broker-settings")
 async def broker_settings_page(request: Request):
     """Broker settings page."""
     if spa_available():
@@ -208,8 +220,8 @@ async def broker_settings_page(request: Request):
     return RedirectResponse(url="/docs")
 
 
-@app.get("/app")
-@app.get("/app/{path:path}")
+@_app.get("/app")
+@_app.get("/app/{path:path}")
 async def spa_app(path: str = ""):
     """Single-page app entry for the modern UI."""
     if spa_available():
@@ -217,7 +229,7 @@ async def spa_app(path: str = ""):
     return RedirectResponse(url="/dashboard")
 
 
-@app.get("/favicon.svg")
+@_app.get("/favicon.svg")
 async def favicon_svg():
     """Serve SPA favicon when available."""
     path = SPA_DIST_DIR / "favicon.svg"
@@ -226,13 +238,13 @@ async def favicon_svg():
     return RedirectResponse(url="/static/favicon.ico")
 
 
-@app.get("/health")
+@_app.get("/health")
 async def health_check():
     """Health check endpoint."""
     return {"status": "ok"}
 
 
-@app.get("/debug/config")
+@_app.get("/debug/config")
 async def debug_config():
     """Debug endpoint to check configuration (remove in production if needed)."""
     return {
