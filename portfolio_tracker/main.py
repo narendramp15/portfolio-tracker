@@ -1,5 +1,6 @@
 """FastAPI application entry point."""
 
+import logging
 import os
 from pathlib import Path
 
@@ -8,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from portfolio_tracker.config import settings
@@ -15,12 +17,36 @@ from portfolio_tracker.database import create_tables
 from portfolio_tracker.routers import (analysis, auth, broker, dashboard,
                                        market, portfolio, transactions)
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 # Create tables on startup
 create_tables()
 
 # Log CORS configuration on startup (helps debug production issues)
-print(f"✓ CORS Origins configured: {settings.CORS_ORIGINS}")
-print(f"✓ Frontend URL: {settings.FRONTEND_URL}")
+logger.info(f"✓ CORS Origins configured: {settings.CORS_ORIGINS}")
+logger.info(f"✓ Frontend URL: {settings.FRONTEND_URL}")
+logger.info(f"✓ Google OAuth: {'Configured' if settings.GOOGLE_CLIENT_ID else 'Not configured'}")
+
+
+# Request logging middleware
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        logger.info(f"Incoming: {request.method} {request.url.path} - Origin: {request.headers.get('origin', 'None')}")
+        
+        # Log CORS preflight specifically
+        if request.method == "OPTIONS":
+            logger.info(f"CORS Preflight: {request.url.path} from {request.headers.get('origin', 'Unknown')}")
+        
+        response = await call_next(request)
+        
+        logger.info(f"Response: {request.method} {request.url.path} - Status: {response.status_code}")
+        return response
+
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -28,6 +54,9 @@ app = FastAPI(
     description="A modern Python portfolio tracking application",
     version="1.0.0",
 )
+
+# Add request logging middleware (runs first)
+app.add_middleware(RequestLoggingMiddleware)
 
 # Add Session middleware for OAuth (must be added first, runs last in chain)
 app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
@@ -94,7 +123,7 @@ async def login_page(request: Request):
     """Login page."""
     if spa_available():
         return serve_spa_index()
-    return templates.TemplateResponse("login.html", {"request": request})
+    return RedirectResponse(url="/docs")
 
 
 @app.get("/register")
@@ -102,7 +131,7 @@ async def register_page(request: Request):
     """Register page."""
     if spa_available():
         return serve_spa_index()
-    return templates.TemplateResponse("register.html", {"request": request})
+    return RedirectResponse(url="/docs")
 
 
 # Protected pages (authentication required via client-side check)
@@ -111,7 +140,8 @@ async def root(request: Request):
     """Root endpoint - serves homepage."""
     if spa_available():
         return RedirectResponse(url="/app/dashboard")
-    return templates.TemplateResponse("base.html", {"request": request})
+    # If SPA not available, redirect to API docs instead of trying to serve non-existent template
+    return RedirectResponse(url="/docs")
 
 
 @app.get("/portfolios")
@@ -119,7 +149,7 @@ async def portfolios_page(request: Request):
     """Portfolios page."""
     if spa_available():
         return RedirectResponse(url="/app/holdings")
-    return templates.TemplateResponse("portfolio.html", {"request": request})
+    return RedirectResponse(url="/docs")
 
 
 @app.get("/dashboard")
@@ -127,7 +157,7 @@ async def dashboard_page(request: Request):
     """Dashboard page."""
     if spa_available():
         return RedirectResponse(url="/app/dashboard")
-    return templates.TemplateResponse("dashboard.html", {"request": request})
+    return RedirectResponse(url="/docs")
 
 
 @app.get("/transactions")
@@ -135,7 +165,7 @@ async def transactions_page(request: Request):
     """Transactions page."""
     if spa_available():
         return RedirectResponse(url="/app/transactions")
-    return templates.TemplateResponse("transactions.html", {"request": request})
+    return RedirectResponse(url="/docs")
 
 
 @app.get("/broker-settings")
@@ -143,7 +173,7 @@ async def broker_settings_page(request: Request):
     """Broker settings page."""
     if spa_available():
         return RedirectResponse(url="/app/brokers")
-    return templates.TemplateResponse("broker-settings.html", {"request": request})
+    return RedirectResponse(url="/docs")
 
 
 @app.get("/app")

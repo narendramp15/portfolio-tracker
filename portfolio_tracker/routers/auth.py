@@ -1,5 +1,6 @@
 """Authentication API endpoints."""
 
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -17,6 +18,8 @@ from portfolio_tracker.config import settings
 from portfolio_tracker.database import get_db
 from portfolio_tracker.deps import get_current_user
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 # Initialize OAuth client using centralized config
@@ -33,6 +36,8 @@ oauth.register(
 @router.post("/register", response_model=schemas.Token)
 async def register(user_data: schemas.UserRegister, db: Session = Depends(get_db)):
     """Register a new user."""
+    logger.info(f"Registration attempt for email: {user_data.email}, username: {user_data.username}")
+    
     # Check if user already exists
     existing_user = db.query(models.UserModel).filter(
         (models.UserModel.email == user_data.email) |
@@ -40,6 +45,7 @@ async def register(user_data: schemas.UserRegister, db: Session = Depends(get_db
     ).first()
     
     if existing_user:
+        logger.warning(f"Registration failed - email/username already exists: {user_data.email}/{user_data.username}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email or username already registered"
@@ -58,6 +64,8 @@ async def register(user_data: schemas.UserRegister, db: Session = Depends(get_db
     db.add(user)
     db.commit()
     db.refresh(user)
+    
+    logger.info(f"User registered successfully: {user.email} (ID: {user.id})")
     
     # Create access token
     access_token = create_access_token(
@@ -82,12 +90,15 @@ async def register(user_data: schemas.UserRegister, db: Session = Depends(get_db
 @router.post("/login", response_model=schemas.Token)
 async def login(user_data: schemas.UserLogin, db: Session = Depends(get_db)):
     """Login with email and password."""
+    logger.info(f"Login attempt for email: {user_data.email}")
+    
     # Find user by email
     user = db.query(models.UserModel).filter(
         models.UserModel.email == user_data.email
     ).first()
     
     if not user or not verify_password(user_data.password, user.hashed_password):
+        logger.warning(f"Login failed - invalid credentials for: {user_data.email}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
@@ -95,6 +106,7 @@ async def login(user_data: schemas.UserLogin, db: Session = Depends(get_db)):
         )
     
     if not user.is_active:
+        logger.warning(f"Login failed - inactive account: {user_data.email}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is inactive"
@@ -105,6 +117,8 @@ async def login(user_data: schemas.UserLogin, db: Session = Depends(get_db)):
         data={"sub": user.email},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
+    
+    logger.info(f"Login successful for: {user.email} (ID: {user.id})")
     
     return {
         "access_token": access_token,
@@ -123,6 +137,7 @@ async def login(user_data: schemas.UserLogin, db: Session = Depends(get_db)):
 @router.get("/me", response_model=schemas.UserResponse)
 async def get_current_user_endpoint(current_user: models.UserModel = Depends(get_current_user)):
     """Get current authenticated user."""
+    logger.debug(f"User info requested: {current_user.email}")
     return current_user
 
 
@@ -227,12 +242,14 @@ async def reset_password(
 @router.get("/google/login")
 async def google_login(request: Request):
     """Initiate Google OAuth login."""
+    logger.info(f"Google OAuth login initiated - Redirect URI: {settings.GOOGLE_REDIRECT_URI}")
     return await oauth.google.authorize_redirect(request, settings.GOOGLE_REDIRECT_URI)
 
 
 @router.get("/google/callback")
 async def google_callback(request: Request, db: Session = Depends(get_db)):
     """Handle Google OAuth callback."""
+    logger.info("Google OAuth callback received")
     try:
         # Exchange authorization code for access token
         token = await oauth.google.authorize_access_token(request)
@@ -240,6 +257,7 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         # Get user info from Google
         user_info = token.get('userinfo')
         if not user_info:
+            logger.error("Failed to get user info from Google token")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Failed to get user information from Google"
@@ -249,7 +267,10 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         full_name = user_info.get('name', '')
         google_id = user_info.get('sub')  # Google's unique user ID
         
+        logger.info(f"Google OAuth user info retrieved - Email: {email}, Name: {full_name}, Google ID: {google_id}")
+        
         if not email:
+            logger.error("Email not provided by Google")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email not provided by Google"
@@ -261,6 +282,7 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         ).first()
         
         if not user:
+            logger.info(f"Creating new user via Google OAuth: {email}")
             # Create new user with Google OAuth
             # Generate a random username from email
             username = email.split('@')[0]
@@ -284,12 +306,17 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
             db.add(user)
             db.commit()
             db.refresh(user)
+            logger.info(f"Google OAuth user created successfully: {email} (ID: {user.id}, Username: {username})")
+        else:
+            logger.info(f"Existing user logged in via Google OAuth: {email} (ID: {user.id})")
         
         # Create access token
         access_token = create_access_token(
             data={"sub": user.email},
             expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         )
+        
+        logger.info(f"Google OAuth token created, redirecting to: {settings.FRONTEND_URL}/auth/callback")
         
         # Redirect to frontend with token
         return RedirectResponse(
@@ -298,9 +325,7 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         
     except Exception as e:
         # Log the actual error for debugging
-        print(f"Google OAuth error: {type(e).__name__}: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Google OAuth error: {type(e).__name__}: {str(e)}", exc_info=True)
         
         # Redirect to login with error
         return RedirectResponse(

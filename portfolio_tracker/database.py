@@ -1,10 +1,14 @@
 """Database configuration and session management."""
 
+import logging
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import QueuePool
 
 from portfolio_tracker.config import settings
+
+logger = logging.getLogger(__name__)
 
 # Get database URL from centralized config
 DATABASE_URL = settings.DATABASE_URL
@@ -15,13 +19,14 @@ if not settings.TESTING:
         import os
         pg_host = os.getenv("PGHOST", "unknown")
         pg_db = os.getenv("PGDATABASE", "unknown")
-        print(f"✓ Using PostgreSQL database: {pg_db} at {pg_host}")
+        logger.info(f"Using PostgreSQL database: {pg_db} at {pg_host}")
     elif settings.is_sqlite():
-        print("⚠️  Using SQLite (local file) - data will be lost on Render/Railway restarts!")
+        logger.warning("Using SQLite (local file) - data will be lost on Render/Railway restarts!")
 
 # Create engine with appropriate settings
 if settings.is_sqlite():
     # SQLite settings
+    logger.info("Creating SQLite engine")
     engine = create_engine(
         DATABASE_URL,
         connect_args={"check_same_thread": False},
@@ -33,6 +38,7 @@ else:
     # 1. Pre-ping connections to check if they're still alive
     # 2. Recycle connections frequently
     # 3. Handle dropped connections gracefully
+    logger.info(f"Creating PostgreSQL engine with connection pool (size=5, max_overflow=10, recycle=300s)")
     engine = create_engine(
         DATABASE_URL,
         echo=settings.DB_ECHO,
