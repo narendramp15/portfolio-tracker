@@ -18,6 +18,10 @@ from portfolio_tracker.routers import (analysis, auth, broker, dashboard,
 # Create tables on startup
 create_tables()
 
+# Log CORS configuration on startup (helps debug production issues)
+print(f"✓ CORS Origins configured: {settings.CORS_ORIGINS}")
+print(f"✓ Frontend URL: {settings.FRONTEND_URL}")
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Portfolio Tracker",
@@ -164,6 +168,17 @@ async def favicon_svg():
 async def health_check():
     """Health check endpoint."""
     return {"status": "ok"}
+
+
+@app.get("/debug/config")
+async def debug_config():
+    """Debug endpoint to check configuration (remove in production if needed)."""
+    return {
+        "cors_origins": settings.CORS_ORIGINS,
+        "frontend_url": settings.FRONTEND_URL,
+        "google_oauth_configured": bool(settings.GOOGLE_CLIENT_ID),
+        "google_redirect_uri": settings.GOOGLE_REDIRECT_URI,
+    }
 
 
 if __name__ == "__main__":
