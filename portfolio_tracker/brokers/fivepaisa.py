@@ -46,7 +46,7 @@ class FivePaisaBroker:
         if self._client is None:
             try:
                 from py5paisa import FivePaisaClient
-                
+
                 # For OAuth flow, we only need USER_KEY and ENCRYPTION_KEY
                 # The other fields can be empty - OAuth handles authentication
                 cred = {
