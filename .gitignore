@@ -84,3 +84,11 @@ temp/
 # Frontend
 frontend/node_modules/
 frontend/dist/
+CSV_EXPORT_TESTING_SUMMARY.md
+DEPLOYMENT.md
+GOOGLE_OAUTH_SETUP.md
+ZERODHA_SETUP.md
+SUPABASE_SETUP.md
+FRONTEND_BROKER_UPDATE.md
+render.yaml
+RENDER_DEPLOY.md
