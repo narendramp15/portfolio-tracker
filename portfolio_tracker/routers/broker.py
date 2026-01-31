@@ -635,6 +635,75 @@ def setup_fivepaisa_broker(
         )
 
 
+@router.get("/fivepaisa/login-url")
+def get_fivepaisa_login_url(
+    token: Optional[str] = Query(default=None),
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get 5Paisa OAuth login URL."""
+    try:
+        from portfolio_tracker.brokers.fivepaisa import FivePaisaBroker
+        
+        user_id = user.id
+        config = crud.get_broker_config_by_broker_name(db, user_id, "fivepaisa")
+        if not config:
+            raise ValueError("5Paisa not connected. Set up API credentials first.")
+        
+        api_key = EncryptionManager.decrypt(config.api_key or "")
+        api_secret = EncryptionManager.decrypt(config.api_secret or "")
+        
+        broker = FivePaisaBroker(api_key=api_key, api_secret=api_secret)
+        login_url = broker.get_login_url()
+        
+        return {"login_url": login_url}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post("/fivepaisa/callback")
+def fivepaisa_oauth_callback(
+    request_token: str = Query(..., description="OAuth request token from 5Paisa redirect"),
+    token: Optional[str] = Query(default=None),
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Complete 5Paisa OAuth flow with request token."""
+    try:
+        from portfolio_tracker.brokers.fivepaisa import FivePaisaBroker
+        
+        user_id = user.id
+        config = crud.get_broker_config_by_broker_name(db, user_id, "fivepaisa")
+        if not config:
+            raise ValueError("5Paisa not connected. Set up API credentials first.")
+        
+        api_key = EncryptionManager.decrypt(config.api_key or "")
+        api_secret = EncryptionManager.decrypt(config.api_secret or "")
+        
+        broker = FivePaisaBroker(api_key=api_key, api_secret=api_secret)
+        access_token = broker.set_access_token(request_token)
+        
+        # Save access token to config
+        crud.update_broker_config(
+            db,
+            config.id,
+            access_token=EncryptionManager.encrypt(access_token)
+        )
+        
+        return {
+            "success": True,
+            "message": "5Paisa authorization successful"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"5Paisa OAuth failed: {str(e)}"
+        )
+
+
 @router.post("/fivepaisa/sync-holdings", response_model=schemas.BrokerSyncResponse)
 def sync_fivepaisa_holdings(
     portfolio_id: int = Query(...),
@@ -644,7 +713,7 @@ def sync_fivepaisa_holdings(
 ):
     """Sync holdings from 5Paisa to portfolio."""
     try:
-        from portfolio_tracker.brokers.fivepaisa import FivepaIsaBroker
+        from portfolio_tracker.brokers.fivepaisa import FivePaisaBroker
         
         user_id = user.id
         
@@ -652,6 +721,10 @@ def sync_fivepaisa_holdings(
         config = crud.get_broker_config_by_broker_name(db, user_id, "fivepaisa")
         if not config:
             raise ValueError("5Paisa not connected")
+        
+        # Check for access token
+        if not config.access_token:
+            raise ValueError("5Paisa not authorized. Please complete the login flow.")
         
         # Get portfolio
         portfolio = crud.get_portfolio_by_id(db, portfolio_id)
@@ -661,8 +734,10 @@ def sync_fivepaisa_holdings(
         # Decrypt credentials
         api_key = EncryptionManager.decrypt(config.api_key or "")
         api_secret = EncryptionManager.decrypt(config.api_secret or "")
+        access_token = EncryptionManager.decrypt(config.access_token)
         
-        broker = FivepaIsaBroker(api_key=api_key, api_secret=api_secret)
+        broker = FivePaisaBroker(api_key=api_key, api_secret=api_secret)
+        broker.set_token(access_token, config.broker_user_id)
         holdings = broker.get_holdings()
         
         # Create or update assets

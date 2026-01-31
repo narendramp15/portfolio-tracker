@@ -197,6 +197,21 @@ class Settings:
         """Zerodha OAuth redirect URL."""
         return os.getenv("ZERODHA_REDIRECT_URL", "http://localhost:8000/api/broker/zerodha/callback")
     
+    @property
+    def FIVEPAISA_API_KEY(self) -> Optional[str]:
+        """5Paisa User Key (VendorKey)."""
+        return os.getenv("5PAISA_API_KEY")
+    
+    @property
+    def FIVEPAISA_API_SECRET(self) -> Optional[str]:
+        """5Paisa Encryption Key."""
+        return os.getenv("5PAISA_API_SECRET")
+    
+    @property
+    def FIVEPAISA_REDIRECT_URL(self) -> str:
+        """5Paisa OAuth redirect URL."""
+        return os.getenv("FIVEPAISA_REDIRECT_URL", "http://localhost:8000/api/broker/fivepaisa/callback")
+    
     # ===================
     # Logging Settings
     # ===================

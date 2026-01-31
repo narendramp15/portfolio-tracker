@@ -50,8 +50,8 @@ class TestBrokerModules:
         broker = FivepaIsaBroker(api_key="test_key", api_secret="test_secret")
         
         assert broker is not None
-        assert hasattr(broker, 'api_key')
-        assert hasattr(broker, 'api_secret')
+        assert hasattr(broker, 'user_key')  # 5Paisa uses user_key internally
+        assert hasattr(broker, 'encryption_key')  # 5Paisa uses encryption_key internally
     
     def test_fivepaisa_broker_has_required_methods(self):
         """Test 5Paisa broker has all required methods."""
@@ -61,7 +61,7 @@ class TestBrokerModules:
         assert hasattr(broker, 'set_token')
         assert hasattr(broker, 'get_holdings')
         assert hasattr(broker, 'get_profile')
-        assert hasattr(broker, '_make_request')
+        assert hasattr(broker, 'get_login_url')  # 5Paisa has OAuth login
     
     def test_broker_set_access_token(self):
         """Test setting access token on broker."""
@@ -89,7 +89,7 @@ class TestBrokerModules:
         
         assert broker1.api_key == "key1"
         assert broker2.api_key == "key2"
-        assert broker3.api_key == "key3"
+        assert broker3.user_key == "key3"  # 5Paisa uses user_key internally
     
     def test_broker_credential_isolation(self):
         """Test that broker instances maintain separate credentials."""

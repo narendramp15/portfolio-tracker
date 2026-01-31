@@ -25,9 +25,9 @@ async function fetchBrokerConfigs() {
 }
 
 const brokers = [
-  { key: 'zerodha', name: 'Zerodha', icon: '📊' },
-  { key: 'angel', name: 'Angel Broking', icon: '💼' },
-  { key: 'fivepaisa', name: '5Paisa', icon: '💰' },
+  { key: 'zerodha', name: 'Zerodha', icon: '📊', implemented: true },
+  { key: 'angel', name: 'Angel Broking', icon: '💼', implemented: false },
+  { key: 'fivepaisa', name: '5Paisa', icon: '💰', implemented: true },
 ]
 
 export function BrokersPage() {
@@ -148,11 +148,13 @@ export function BrokersPage() {
               {connectedBrokerList.length === 0 ? (
                 <option value="zerodha">Connect a broker first</option>
               ) : (
-                connectedBrokerList.map((b) => (
-                  <option key={b.id} value={b.broker_name}>
-                    {b.broker_name.toUpperCase()}
-                  </option>
-                ))
+                connectedBrokerList
+                  .filter((b) => brokers.find((br) => br.key === b.broker_name)?.implemented)
+                  .map((b) => (
+                    <option key={b.id} value={b.broker_name}>
+                      {b.broker_name.toUpperCase()}
+                    </option>
+                  ))
               )}
             </select>
 
@@ -242,6 +244,27 @@ export function BrokersPage() {
             const config = connectedBrokerList.find(c => c.broker_name === broker.key)
             const isConnected = !!config
             const isAuthorized = config?.is_authorized ?? false
+            
+            // For non-implemented brokers, show "Coming Soon"
+            if (!broker.implemented) {
+              return (
+                <Card key={broker.key} className="opacity-60">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">{broker.icon}</span>
+                      <div>
+                        <div className="font-semibold text-sm">{broker.name}</div>
+                        <div className="text-xs text-muted">Coming soon</div>
+                      </div>
+                    </div>
+                    <span className="rounded-full bg-muted/20 px-3 py-1 text-xs font-medium text-muted">
+                      Coming Soon
+                    </span>
+                  </div>
+                </Card>
+              )
+            }
+            
             const statusText = isConnected
               ? (isAuthorized ? 'Authorized ✓' : 'Needs login')
               : 'Not connected'
@@ -265,11 +288,11 @@ export function BrokersPage() {
                       onSuccess={() => queryClient.invalidateQueries({ queryKey: ['brokers', 'configs'] })}
                     />
                   )}
-                  {isConnected && !isAuthorized && broker.key === 'zerodha' && (
+                  {isConnected && !isAuthorized && (broker.key === 'zerodha' || broker.key === 'fivepaisa') && (
                     <button
                       onClick={async () => {
                         try {
-                          const { data } = await api.get<{ login_url: string }>('/broker/zerodha/login-url')
+                          const { data } = await api.get<{ login_url: string }>(`/broker/${broker.key}/login-url`)
                           window.location.href = data.login_url
                         } catch (err) {
                           console.error('Failed to get login URL:', err)
@@ -277,7 +300,7 @@ export function BrokersPage() {
                       }}
                       className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 px-4 py-2 text-sm font-bold text-white hover:shadow-lg transition-all"
                     >
-                      Login to Zerodha
+                      Login to {broker.name}
                     </button>
                   )}
                 </div>
