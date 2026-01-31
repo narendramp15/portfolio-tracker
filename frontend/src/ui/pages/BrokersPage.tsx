@@ -114,10 +114,32 @@ export function BrokersPage() {
     },
   })
 
+  const completeFivepaisa = useMutation({
+    mutationFn: async (requestToken: string) => {
+      const { data } = await api.post('/broker/fivepaisa/callback', undefined, {
+        params: { request_token: requestToken },
+      })
+      return data
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['brokers', 'configs'] })
+      navigate('/app/brokers', { replace: true })
+    },
+  })
+
   useEffect(() => {
+    // Handle Zerodha callback (uses request_token)
     const requestToken = searchParams.get('request_token')
     if (requestToken) {
       completeZerodha.mutate(requestToken)
+      return
+    }
+    
+    // Handle 5Paisa callback (uses RequestToken or accessToken)
+    const fivepaisaToken = searchParams.get('RequestToken') || searchParams.get('accessToken')
+    if (fivepaisaToken) {
+      completeFivepaisa.mutate(fivepaisaToken)
+      return
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
@@ -235,7 +257,16 @@ export function BrokersPage() {
           </div>
         </Card>
       ) : null}
-
+      {completeFivepaisa.isError ? (
+        <Card>
+          <div className="text-sm text-danger">
+            {(completeFivepaisa.error as any)?.response?.data?.detail ?? (completeFivepaisa.error as Error).message}
+          </div>
+          <div className="mt-1 text-sm text-muted">
+            If 5Paisa redirected back here, we need the saved config id. Re-run "Connect 5Paisa" if needed.
+          </div>
+        </Card>
+      ) : null}
       {/* Setup Section */}
       <div>
         <h2 className="text-sm font-semibold mb-3 text-muted">Connect a Broker</h2>

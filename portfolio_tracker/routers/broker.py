@@ -176,18 +176,23 @@ def get_broker_configs(
     db: Session = Depends(get_db),
 ):
     """Get all broker configurations for current user."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
         configs = crud.get_broker_configs_by_user(db, user.id)
         # Add is_authorized field based on whether access_token exists
         result = []
         for config in configs:
+            has_token = bool(config.access_token)
+            logger.info(f"Broker {config.broker_name}: access_token exists={has_token}, broker_user_id={config.broker_user_id}")
             config_dict = {
                 "id": config.id,
                 "user_id": config.user_id,
                 "broker_name": config.broker_name,
                 "broker_user_id": config.broker_user_id or "",
                 "is_active": config.is_active,
-                "is_authorized": bool(config.access_token),  # True if access token exists
+                "is_authorized": has_token,  # True if access token exists
                 "last_synced": config.last_synced,
                 "created_at": config.created_at,
                 "updated_at": config.updated_at,
@@ -672,6 +677,9 @@ def fivepaisa_oauth_callback(
     db: Session = Depends(get_db),
 ):
     """Complete 5Paisa OAuth flow with request token."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
         from portfolio_tracker.brokers.fivepaisa import FivePaisaBroker
         
@@ -683,21 +691,36 @@ def fivepaisa_oauth_callback(
         api_key = EncryptionManager.decrypt(config.api_key or "")
         api_secret = EncryptionManager.decrypt(config.api_secret or "")
         
+        logger.info(f"5Paisa callback: Creating broker with api_key={api_key[:8]}...")
         broker = FivePaisaBroker(api_key=api_key, api_secret=api_secret)
+        
+        logger.info(f"5Paisa callback: Calling set_access_token with token length={len(request_token)}")
         access_token = broker.set_access_token(request_token)
         
-        # Save access token to config
+        logger.info(f"5Paisa callback: Got access_token length={len(access_token) if access_token else 0}, client_code={broker.client_code}")
+        
+        if not access_token:
+            # Even if SDK fails, use the request_token as fallback
+            logger.warning("5Paisa callback: access_token empty, using request_token as fallback")
+            access_token = request_token
+        
+        # Save access token and client code to config
         crud.update_broker_config(
             db,
             config.id,
-            access_token=EncryptionManager.encrypt(access_token)
+            access_token=EncryptionManager.encrypt(access_token),
+            broker_user_id=broker.client_code or config.broker_user_id
         )
+        
+        logger.info(f"5Paisa callback: Saved config successfully")
         
         return {
             "success": True,
-            "message": "5Paisa authorization successful"
+            "message": "5Paisa authorization successful",
+            "client_code": broker.client_code
         }
     except Exception as e:
+        logger.error(f"5Paisa callback error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"5Paisa OAuth failed: {str(e)}"

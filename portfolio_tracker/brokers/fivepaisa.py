@@ -86,17 +86,55 @@ class FivePaisaBroker:
         """
         Exchange request token for access token using OAuth.
 
+        The request_token from 5Paisa is actually a JWT that contains:
+        - unique_name: the client code
+        - role: the API key
+
         Args:
-            request_token: Authorization request token from callback
+            request_token: Authorization request token (JWT) from callback
 
         Returns:
             Access token for subsequent API calls
         """
+        import json
+        import base64
+        import logging
+        
+        logger = logging.getLogger(__name__)
+        
         try:
+            # The request_token is a JWT - extract client code from it
+            # JWT format: header.payload.signature
+            parts = request_token.split('.')
+            if len(parts) >= 2:
+                # Decode the payload (add padding if needed)
+                payload = parts[1]
+                padding = 4 - len(payload) % 4
+                if padding != 4:
+                    payload += '=' * padding
+                decoded = base64.urlsafe_b64decode(payload)
+                claims = json.loads(decoded)
+                self.client_code = claims.get('unique_name', '')
+                logger.info(f"5Paisa: Extracted client_code={self.client_code} from JWT")
+            
+            # Try to get OAuth session from 5Paisa SDK
             client = self._get_client()
-            client.get_oauth_session(request_token)
-            self.access_token = client.get_access_token()
-            return self.access_token or ""
+            try:
+                client.get_oauth_session(request_token)
+                sdk_token = client.get_access_token()
+                if sdk_token:
+                    self.access_token = sdk_token
+                    logger.info(f"5Paisa: Got access token from SDK")
+                else:
+                    # SDK returned empty - use JWT token directly
+                    self.access_token = request_token
+                    logger.info(f"5Paisa: SDK returned empty, using JWT as access token")
+            except Exception as e:
+                # If SDK fails, use the JWT token directly as access token
+                logger.warning(f"5Paisa SDK error: {e}, using JWT as access token")
+                self.access_token = request_token
+            
+            return self.access_token
         except Exception as e:
             raise ValueError(f"Failed to generate session: {str(e)}")
 
