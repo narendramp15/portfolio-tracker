@@ -1,8 +1,42 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BarChart3, TrendingUp, Shield, Zap, PieChart, LineChart, ArrowRight, CheckCircle, Play, Sparkles, IndianRupee, Lock, Github, Linkedin, Code2, ShieldCheck, KeyRound, EyeOff, Gift, Crown, Rocket } from 'lucide-react'
+import { BarChart3, TrendingUp, Shield, Zap, PieChart, LineChart, ArrowRight, CheckCircle, Play, Sparkles, IndianRupee, Lock, Github, Linkedin, Code2, ShieldCheck, KeyRound, EyeOff, Gift, Crown, Rocket, Mail, Send, MessageSquare, Menu, X } from 'lucide-react'
 
 export function LandingPage() {
     const navigate = useNavigate()
+    const [contactForm, setContactForm] = useState({ name: '', email: '', subject: '', message: '' })
+    const [isSubmitting, setIsSubmitting] = useState(false)
+    const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle')
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+    const scrollToSection = (id: string) => {
+        const element = document.getElementById(id)
+        if (element) {
+            element.scrollIntoView({ behavior: 'smooth' })
+        }
+        setMobileMenuOpen(false)
+    }
+
+    const handleContactSubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setIsSubmitting(true)
+
+        // Create mailto link with form data
+        const mailtoLink = `mailto:futurestation.in@gmail.com?subject=${encodeURIComponent(`[QuantLeap] ${contactForm.subject}`)}&body=${encodeURIComponent(`Name: ${contactForm.name}\nEmail: ${contactForm.email}\n\nMessage:\n${contactForm.message}`)}`
+
+        // Open email client
+        window.location.href = mailtoLink
+
+        // Show success message
+        setTimeout(() => {
+            setIsSubmitting(false)
+            setSubmitStatus('success')
+            setContactForm({ name: '', email: '', subject: '', message: '' })
+
+            // Reset status after 5 seconds
+            setTimeout(() => setSubmitStatus('idle'), 5000)
+        }, 500)
+    }
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
@@ -15,10 +49,30 @@ export function LandingPage() {
                             QuantLeap
                         </span>
                     </div>
+
+                    {/* Desktop Menu */}
+                    <div className="hidden md:flex items-center gap-6">
+                        <button onClick={() => scrollToSection('features')} className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors">
+                            Features
+                        </button>
+                        <button onClick={() => scrollToSection('security')} className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors">
+                            Security
+                        </button>
+                        <button onClick={() => scrollToSection('pricing')} className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors">
+                            Pricing
+                        </button>
+                        <button onClick={() => scrollToSection('about')} className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors">
+                            About
+                        </button>
+                        <button onClick={() => scrollToSection('contact')} className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors">
+                            Contact
+                        </button>
+                    </div>
+
                     <div className="flex items-center gap-3">
                         <button
                             onClick={() => navigate('/login')}
-                            className="px-4 py-2 text-sm font-medium text-text hover:text-indigo-600 transition-colors"
+                            className="hidden sm:block px-4 py-2 text-sm font-medium text-text hover:text-indigo-600 transition-colors"
                         >
                             Login
                         </button>
@@ -28,8 +82,45 @@ export function LandingPage() {
                         >
                             Get Started
                         </button>
+                        {/* Mobile Menu Button */}
+                        <button
+                            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                            className="md:hidden p-2 text-slate-600 hover:text-indigo-600 transition-colors"
+                        >
+                            {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+                        </button>
                     </div>
                 </div>
+
+                {/* Mobile Menu Dropdown */}
+                {mobileMenuOpen && (
+                    <div className="md:hidden border-t border-slate-100 bg-white/95 backdrop-blur-sm">
+                        <div className="container mx-auto px-4 py-4 flex flex-col gap-2">
+                            <button onClick={() => scrollToSection('features')} className="px-4 py-3 text-left text-sm font-medium text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors">
+                                Features
+                            </button>
+                            <button onClick={() => scrollToSection('security')} className="px-4 py-3 text-left text-sm font-medium text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors">
+                                Security
+                            </button>
+                            <button onClick={() => scrollToSection('pricing')} className="px-4 py-3 text-left text-sm font-medium text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors">
+                                Pricing
+                            </button>
+                            <button onClick={() => scrollToSection('about')} className="px-4 py-3 text-left text-sm font-medium text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors">
+                                About
+                            </button>
+                            <button onClick={() => scrollToSection('contact')} className="px-4 py-3 text-left text-sm font-medium text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors">
+                                Contact
+                            </button>
+                            <hr className="my-2 border-slate-100" />
+                            <button
+                                onClick={() => { navigate('/login'); setMobileMenuOpen(false) }}
+                                className="px-4 py-3 text-left text-sm font-medium text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors"
+                            >
+                                Login
+                            </button>
+                        </div>
+                    </div>
+                )}
             </nav>
 
             {/* Hero Section */}
@@ -231,7 +322,9 @@ export function LandingPage() {
                         <p className="text-sm text-muted mb-6">Seamlessly connects with your favorite brokers</p>
                         <div className="flex flex-wrap items-center justify-center gap-8 opacity-60">
                             <div className="flex items-center gap-2 text-lg font-semibold text-slate-600">
-                                <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center text-orange-600 font-bold">Z</div>
+                                <div className="w-10 h-10 rounded-lg bg-orange-50 flex items-center justify-center p-1.5">
+                                    <img src="https://kite.zerodha.com/static/images/kite-logo.svg" alt="Zerodha" className="w-full h-full object-contain" />
+                                </div>
                                 Zerodha
                             </div>
                             <div className="flex items-center gap-2 text-lg font-semibold text-slate-600">
@@ -252,7 +345,7 @@ export function LandingPage() {
             </section>
 
             {/* Security & Trust Section */}
-            <section className="bg-slate-900 py-16">
+            <section id="security" className="bg-slate-900 py-16">
                 <div className="container mx-auto px-4">
                     <div className="max-w-5xl mx-auto">
                         <div className="text-center mb-12">
@@ -327,7 +420,7 @@ export function LandingPage() {
             </section>
 
             {/* Features + Benefits Grid */}
-            <section className="container mx-auto px-4 py-16">
+            <section id="features" className="container mx-auto px-4 py-16">
                 <div className="text-center mb-12">
                     <h2 className="text-3xl md:text-4xl font-bold mb-4">Stop Guessing. Start Knowing.</h2>
                     <p className="text-lg text-muted max-w-2xl mx-auto">
@@ -436,7 +529,7 @@ export function LandingPage() {
             </section>
 
             {/* Pricing Section */}
-            <section className="container mx-auto px-4 py-16">
+            <section id="pricing" className="container mx-auto px-4 py-16">
                 <div className="text-center mb-12">
                     <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 bg-emerald-100 border border-emerald-200 rounded-full">
                         <Gift className="h-4 w-4 text-emerald-600" />
@@ -536,7 +629,7 @@ export function LandingPage() {
             </section>
 
             {/* Built By / About Section */}
-            <section className="container mx-auto px-4 py-16">
+            <section id="about" className="container mx-auto px-4 py-16">
                 <div className="max-w-4xl mx-auto">
                     <div className="text-center mb-10">
                         <h2 className="text-3xl md:text-4xl font-bold mb-4">Built by an Investor, for Investors</h2>
@@ -605,6 +698,156 @@ export function LandingPage() {
                     >
                         Get Started Free
                     </button>
+                </div>
+            </section>
+
+            {/* Contact Us Section */}
+            <section id="contact" className="bg-slate-50 py-16">
+                <div className="container mx-auto px-4">
+                    <div className="max-w-4xl mx-auto">
+                        <div className="text-center mb-12">
+                            <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 bg-indigo-100 border border-indigo-200 rounded-full">
+                                <MessageSquare className="h-4 w-4 text-indigo-600" />
+                                <span className="text-sm font-medium text-indigo-700">Get in Touch</span>
+                            </div>
+                            <h2 className="text-3xl md:text-4xl font-bold mb-4">Contact Us</h2>
+                            <p className="text-lg text-muted max-w-2xl mx-auto">
+                                Have questions, feedback, or feature requests? We'd love to hear from you.
+                            </p>
+                        </div>
+
+                        <div className="grid md:grid-cols-5 gap-8">
+                            {/* Contact Info */}
+                            <div className="md:col-span-2 space-y-6">
+                                <div className="bg-white rounded-2xl p-6 border border-slate-200">
+                                    <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center mb-4">
+                                        <Mail className="h-6 w-6 text-indigo-600" />
+                                    </div>
+                                    <h3 className="text-lg font-semibold text-slate-900 mb-2">Email Us</h3>
+                                    <a
+                                        href="mailto:futurestation.in@gmail.com"
+                                        className="text-indigo-600 hover:text-indigo-700 transition-colors font-medium"
+                                    >
+                                        futurestation.in@gmail.com
+                                    </a>
+                                    <p className="text-sm text-slate-500 mt-2">
+                                        We typically respond within 24 hours
+                                    </p>
+                                </div>
+
+                                <div className="bg-white rounded-2xl p-6 border border-slate-200">
+                                    <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center mb-4">
+                                        <Github className="h-6 w-6 text-emerald-600" />
+                                    </div>
+                                    <h3 className="text-lg font-semibold text-slate-900 mb-2">Open Source</h3>
+                                    <a
+                                        href="https://github.com/priyaprasadblr/portfolio-tracker"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-emerald-600 hover:text-emerald-700 transition-colors font-medium"
+                                    >
+                                        Report issues on GitHub
+                                    </a>
+                                    <p className="text-sm text-slate-500 mt-2">
+                                        Found a bug? Submit a GitHub issue
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Contact Form */}
+                            <div className="md:col-span-3">
+                                <form onSubmit={handleContactSubmit} className="bg-white rounded-2xl p-6 md:p-8 border border-slate-200 shadow-sm">
+                                    {submitStatus === 'success' && (
+                                        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-3">
+                                            <CheckCircle className="h-5 w-5 text-emerald-600 flex-shrink-0" />
+                                            <p className="text-emerald-700 text-sm font-medium">
+                                                Email client opened! Please send the email to complete your message.
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    <div className="grid md:grid-cols-2 gap-4 mb-4">
+                                        <div>
+                                            <label htmlFor="name" className="block text-sm font-medium text-slate-700 mb-2">
+                                                Your Name
+                                            </label>
+                                            <input
+                                                type="text"
+                                                id="name"
+                                                required
+                                                value={contactForm.name}
+                                                onChange={(e) => setContactForm(prev => ({ ...prev, name: e.target.value }))}
+                                                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                                                placeholder="John Doe"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-2">
+                                                Email Address
+                                            </label>
+                                            <input
+                                                type="email"
+                                                id="email"
+                                                required
+                                                value={contactForm.email}
+                                                onChange={(e) => setContactForm(prev => ({ ...prev, email: e.target.value }))}
+                                                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                                                placeholder="john@example.com"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="mb-4">
+                                        <label htmlFor="subject" className="block text-sm font-medium text-slate-700 mb-2">
+                                            Subject
+                                        </label>
+                                        <input
+                                            type="text"
+                                            id="subject"
+                                            required
+                                            value={contactForm.subject}
+                                            onChange={(e) => setContactForm(prev => ({ ...prev, subject: e.target.value }))}
+                                            className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                                            placeholder="Feature request, bug report, general inquiry..."
+                                        />
+                                    </div>
+
+                                    <div className="mb-6">
+                                        <label htmlFor="message" className="block text-sm font-medium text-slate-700 mb-2">
+                                            Message
+                                        </label>
+                                        <textarea
+                                            id="message"
+                                            required
+                                            rows={5}
+                                            value={contactForm.message}
+                                            onChange={(e) => setContactForm(prev => ({ ...prev, message: e.target.value }))}
+                                            className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors resize-none"
+                                            placeholder="Tell us what's on your mind..."
+                                        />
+                                    </div>
+
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className="w-full py-4 text-lg font-semibold text-white bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl hover:shadow-lg hover:shadow-indigo-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    >
+                                        {isSubmitting ? (
+                                            <>
+                                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                Opening Email...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Send className="h-5 w-5" />
+                                                Send Message
+                                            </>
+                                        )}
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
 
