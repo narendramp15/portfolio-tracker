@@ -109,6 +109,29 @@ def serve_spa_index() -> FileResponse:
 if spa_available() and SPA_ASSETS_DIR.exists():
     app.mount("/assets", StaticFiles(directory=str(SPA_ASSETS_DIR)), name="spa-assets")
 
+
+# Add explicit CORS preflight handler for debugging
+@app.options("/{full_path:path}")
+async def options_handler(request: Request, full_path: str):
+    """Handle all OPTIONS requests explicitly for CORS preflight debugging."""
+    logger.info(f"Explicit OPTIONS handler called for: /{full_path}")
+    logger.info(f"  Origin: {request.headers.get('origin', 'None')}")
+    logger.info(f"  Request Method: {request.headers.get('access-control-request-method', 'None')}")
+    logger.info(f"  Request Headers: {request.headers.get('access-control-request-headers', 'None')}")
+    
+    from fastapi.responses import Response
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+            "Access-Control-Allow-Headers": request.headers.get("access-control-request-headers", "*"),
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Max-Age": "3600",
+        }
+    )
+
+
 # Include routers
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(portfolio.router, prefix="/api/portfolios", tags=["portfolios"])
