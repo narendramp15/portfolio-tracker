@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Dict
 
 from sqlalchemy import (Boolean, Column, DateTime, ForeignKey, Integer,
-                        Numeric, String)
+                        Numeric, String, UniqueConstraint, Index)
 from sqlalchemy.orm import relationship
 
 from portfolio_tracker.database import Base
@@ -150,6 +150,31 @@ class BrokerConfigModel(Base):
 
     # Relationships
     owner = relationship("UserModel")
+
+
+class PriceHistoryModel(Base):
+    """
+    Lean price history table - stores only recent daily closes.
+    
+    Storage strategy for free tier:
+    - Only stores last 90 days of data per symbol
+    - Only tracks symbols that users actually hold
+    - Older data fetched on-demand from yfinance (free API)
+    - ~40 bytes per row = 72KB per user with 20 stocks over 90 days
+    """
+
+    __tablename__ = "price_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    symbol = Column(String(20), nullable=False, index=True)  # e.g., RELIANCE.NS
+    date = Column(DateTime, nullable=False)  # Trading date (DATE precision)
+    close = Column(Numeric(12, 2), nullable=False)  # Closing price (2 decimal places enough for INR)
+    
+    # Composite unique constraint and index for efficient queries
+    __table_args__ = (
+        UniqueConstraint('symbol', 'date', name='uix_symbol_date'),
+        Index('ix_price_history_symbol_date', 'symbol', 'date'),
+    )
 
 
 # Dataclass Models (for core business logic)

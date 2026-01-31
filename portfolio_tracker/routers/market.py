@@ -224,3 +224,109 @@ async def refresh_asset_price(
         "change_percent": ((current_price - old_price) / old_price * 100) if old_price > 0 else 0,
         "updated_at": asset.last_price_update.isoformat()
     }
+
+
+# ===== Price History Endpoints (Storage-Efficient) =====
+
+@router.get("/history/{symbol}")
+async def get_price_history(
+    symbol: str,
+    days: int = 90,
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get historical price data for a symbol.
+    
+    - Recent data (< 90 days): From database (fast)
+    - Older data: Fetched on-demand from yfinance (free)
+    
+    This hybrid approach saves storage on free-tier deployments.
+    """
+    from portfolio_tracker.services.price_history import get_price_history_service
+    
+    service = get_price_history_service(db)
+    data = service.get_price_history(symbol, days=days)
+    
+    return {
+        "symbol": symbol,
+        "days_requested": days,
+        "data_points": len(data),
+        "prices": data
+    }
+
+
+@router.post("/history/backfill")
+async def backfill_price_history(
+    symbol: Optional[str] = None,
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Backfill price history for symbols.
+    
+    - If symbol provided: Backfill just that symbol
+    - If no symbol: Backfill all symbols in user's portfolios
+    
+    Only stores data within retention period (default 90 days) to save space.
+    """
+    from portfolio_tracker.services.price_history import get_price_history_service
+    
+    service = get_price_history_service(db)
+    
+    if symbol:
+        count = service.backfill_symbol(symbol)
+        return {
+            "status": "success",
+            "symbol": symbol,
+            "records_added": count
+        }
+    else:
+        results = service.backfill_all_holdings(user_id=user.id)
+        return {
+            "status": "success",
+            "symbols_processed": results["success"] + results["failed"],
+            "symbols_success": results["success"],
+            "symbols_failed": results["failed"],
+            "details": results["symbols"]
+        }
+
+
+@router.post("/history/cleanup")
+async def cleanup_price_history(
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Clean up price history older than retention period.
+    
+    This helps keep storage lean on free-tier deployments.
+    Recommended to run daily via cron job.
+    """
+    from portfolio_tracker.services.price_history import get_price_history_service
+    
+    service = get_price_history_service(db)
+    deleted = service.cleanup_old_data()
+    
+    return {
+        "status": "success",
+        "records_deleted": deleted
+    }
+
+
+@router.get("/history/stats")
+async def get_price_history_stats(
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get storage statistics for price history.
+    
+    Useful for monitoring storage usage on free-tier deployments.
+    """
+    from portfolio_tracker.services.price_history import get_price_history_service
+    
+    service = get_price_history_service(db)
+    stats = service.get_storage_stats()
+    
+    return stats
