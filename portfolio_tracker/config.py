@@ -157,7 +157,14 @@ class Settings:
     def CORS_ORIGINS(self) -> list[str]:
         """Allowed CORS origins."""
         origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:8000")
-        return [origin.strip() for origin in origins.split(",")]
+        origin_list = [origin.strip() for origin in origins.split(",") if origin.strip()]
+        
+        # Also add FRONTEND_URL if set and not already included
+        frontend = self.FRONTEND_URL
+        if frontend and frontend not in origin_list:
+            origin_list.append(frontend)
+        
+        return origin_list
     
     # ===================
     # Broker Settings

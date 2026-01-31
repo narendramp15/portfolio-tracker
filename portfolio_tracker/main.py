@@ -25,17 +25,20 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# Add Session middleware for OAuth (must be added first, runs last in chain)
+app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
+
 # Add CORS middleware using centralized config
+# This runs before SessionMiddleware in the request chain
+# Must handle preflight OPTIONS requests properly
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
-
-# Add Session middleware for OAuth (must be before routes)
-app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 
 # Mount static files
 static_path = os.path.join(os.path.dirname(__file__), "static")
