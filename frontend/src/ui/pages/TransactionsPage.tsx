@@ -24,7 +24,6 @@ export function TransactionsPage() {
   const [type, setType] = useState<string>('all')
   const [q, setQ] = useState('')
   const [isTransactionOpen, setIsTransactionOpen] = useState(false)
-  const [selectedPortfolioForTransaction, setSelectedPortfolioForTransaction] = useState<Portfolio | null>(null)
 
   const rows = useMemo(() => {
     const list = query.data ?? []

@@ -351,3 +351,8 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## Support
 
 For support, please open an issue on GitHub or contact the maintainers.
+
+
+## Production deployment
+frontend: - vercel (https://vercel.com/narendras-projects-652fd37e)
+portfolio-tracker (fast api) - render
