@@ -1,6 +1,7 @@
 """Transactions API endpoints."""
 
 import csv
+from decimal import Decimal
 from io import StringIO
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -162,6 +163,7 @@ async def create_transaction(
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
 
+    # Create the transaction
     tx = models.TransactionModel(
         portfolio_id=portfolio_id,
         asset_id=transaction.asset_id,
@@ -171,6 +173,25 @@ async def create_transaction(
         notes=transaction.notes,
     )
     db.add(tx)
+
+    # Update asset quantities and average price
+    if transaction.type.lower() == 'buy':
+        # For buy: increase quantity, recalculate average price
+        total_value = (asset.quantity * asset.purchase_price) + (transaction.quantity * transaction.price)
+        total_quantity = asset.quantity + transaction.quantity
+        new_avg_price = total_value / total_quantity if total_quantity > 0 else transaction.price
+        
+        asset.quantity = total_quantity
+        asset.purchase_price = new_avg_price
+    elif transaction.type.lower() == 'sell':
+        # For sell: decrease quantity
+        if asset.quantity < transaction.quantity:
+            raise HTTPException(status_code=400, detail="Insufficient quantity to sell")
+        asset.quantity = asset.quantity - transaction.quantity
+        
+        # If quantity becomes 0, we could delete the asset or keep it
+        # For now, keep it but maybe set quantity to 0
+
     db.commit()
     db.refresh(tx)
 
@@ -245,6 +266,20 @@ async def delete_transaction(
     )
     if not tx:
         raise HTTPException(status_code=404, detail="Transaction not found")
+
+    # Reverse the asset changes
+    asset = tx.asset
+    if tx.type == 'buy':
+        # Reverse buy: decrease quantity
+        if asset.quantity < tx.quantity:
+            raise HTTPException(status_code=400, detail="Cannot delete transaction: insufficient quantity")
+        asset.quantity = asset.quantity - tx.quantity
+    elif tx.type == 'sell':
+        # Reverse sell: increase quantity
+        asset.quantity = asset.quantity + tx.quantity
+
+    # Note: Reversing average price calculation is complex and not implemented
+    # In a production system, you'd need to recalculate from all transactions
 
     db.delete(tx)
     db.commit()

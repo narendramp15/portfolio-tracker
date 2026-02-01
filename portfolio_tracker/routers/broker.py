@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from kiteconnect import KiteConnect
 from sqlalchemy.orm import Session
 
 from portfolio_tracker import crud, schemas
@@ -22,6 +23,7 @@ router = APIRouter()
 def setup_zerodha_broker(
     api_key: str = Query(...),
     api_secret: str = Query(...),
+    consent_given: bool = Query(False),
     token: Optional[str] = Query(default=None),
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -44,7 +46,8 @@ def setup_zerodha_broker(
                 db,
                 config.id,
                 api_key=EncryptionManager.encrypt(api_key),
-                api_secret=EncryptionManager.encrypt(api_secret)
+                api_secret=EncryptionManager.encrypt(api_secret),
+                consent_given=consent_given,
             )
         else:
             config = crud.create_broker_config(
@@ -53,7 +56,8 @@ def setup_zerodha_broker(
                 broker_name="zerodha",
                 broker_user_id="",
                 api_key=EncryptionManager.encrypt(api_key),
-                api_secret=EncryptionManager.encrypt(api_secret)
+                api_secret=EncryptionManager.encrypt(api_secret),
+                consent_given=consent_given,
             )
         
         return {
@@ -242,9 +246,12 @@ def sync_zerodha_holdings(
     db: Session = Depends(get_db)
 ):
     """Sync holdings from Zerodha to portfolio."""
+    import logging
+    logger = logging.getLogger(__name__)
+
     try:
         user_id = user.id
-        
+
         # Get broker config
         config = crud.get_broker_config_by_broker_name(db, user_id, "zerodha")
         if not config or not config.access_token:
@@ -252,19 +259,80 @@ def sync_zerodha_holdings(
                 "Zerodha not connected. Please (re)connect Zerodha from the Brokers page and ensure "
                 "ZERODHA_REDIRECT_URL is set to http://localhost:8000/app/brokers."
             )
-        
+
         # Get portfolio
         portfolio = crud.get_portfolio_by_id(db, portfolio_id)
         if not portfolio or portfolio.user_id != user_id:
             raise ValueError("Portfolio not found")
-        
+
         # Decrypt access token and create broker instance
-        access_token = EncryptionManager.decrypt(config.access_token)
-        api_key = EncryptionManager.decrypt(config.api_key or "")
-        api_secret = EncryptionManager.decrypt(config.api_secret or "")
-        
+        try:
+            access_token = EncryptionManager.decrypt(config.access_token)
+            api_key = EncryptionManager.decrypt(config.api_key or "")
+            api_secret = EncryptionManager.decrypt(config.api_secret or "")
+            logger.info(f"✓ Credentials decrypted successfully")
+        except Exception as decrypt_error:
+            logger.error(f"✗ Failed to decrypt credentials: {str(decrypt_error)}")
+            raise ValueError(f"Failed to decrypt Zerodha credentials: {str(decrypt_error)}")
+
+        # Log credential details for debugging (not the actual values)
+        logger.info(f"📋 API key: length={len(api_key)}, non-empty={bool(api_key.strip())}")
+        logger.info(f"📋 API secret: length={len(api_secret)}, non-empty={bool(api_secret.strip())}")
+        logger.info(f"📋 Access token: length={len(access_token)}, non-empty={bool(access_token.strip())}")
+        logger.info(f"📋 Broker config: api_key_stored={bool(config.api_key)}, access_token_stored={bool(config.access_token)}")
+
+        # Validate decrypted credentials are not empty
+        if not api_key.strip():
+            logger.error("✗ API key is empty after decryption")
+            raise ValueError("API key is empty - Zerodha not properly configured")
+        if not access_token.strip():
+            logger.error("✗ Access token is empty after decryption")
+            raise ValueError("Access token is empty - Zerodha not properly configured")
+
+        # Test credentials with profile API call
+        logger.info(f"🔐 Creating KiteConnect instance with api_key")
+        try:
+            kite = KiteConnect(api_key=api_key)
+            logger.info(f"✓ KiteConnect instance created")
+        except Exception as kite_error:
+            logger.error(f"✗ Failed to create KiteConnect instance: {str(kite_error)}")
+            raise ValueError(f"Failed to initialize KiteConnect: {str(kite_error)}")
+
+        logger.info(f"🔐 Setting access token on KiteConnect")
+        try:
+            kite.set_access_token(access_token)
+            logger.info(f"✓ Access token set successfully")
+        except Exception as token_error:
+            logger.error(f"✗ Failed to set access token: {str(token_error)}")
+            raise ValueError(f"Failed to set access token: {str(token_error)}")
+
+        logger.info(f"🔐 Calling profile API to validate credentials")
+        try:
+            profile = kite.profile()
+            logger.info(f"✓ Profile API call successful: user_name={profile.get('user_name', 'Unknown')}, user_id={profile.get('user_id', 'Unknown')}")
+        except Exception as profile_error:
+            error_details = f"{str(profile_error)}"
+            if hasattr(profile_error, 'code'):
+                error_details += f" (code: {profile_error.code})"
+            if hasattr(profile_error, 'response'):
+                error_details += f" (response: {profile_error.response})"
+            logger.error(f"✗ Profile API call failed: {error_details}")
+            logger.warning(f"⚠️  This usually means: 1) Access token expired, 2) API key invalid, or 3) Network issue")
+            logger.warning(f"⚠️  Solution: Try reconnecting Zerodha from the Brokers page")
+            raise ValueError(f"Invalid Zerodha credentials - profile API failed: {error_details}")
+
+        # Test the credentials by making a simple API call first
         broker = ZerodhaBroker(api_key=api_key, api_secret=api_secret)
         broker.set_token(access_token)
+
+        # Test with profile call first (lighter than holdings)
+        try:
+            profile = broker.get_profile()
+            logger.info(f"Profile test successful for user {user_id}: {profile.get('user_id', 'unknown')}")
+        except Exception as profile_error:
+            logger.error(f"Profile test failed for user {user_id}: {str(profile_error)}")
+            raise ValueError(f"Authentication failed: {str(profile_error)}")
+
         holdings = broker.get_holdings()
         
         # Create or update assets in portfolio
@@ -328,11 +396,15 @@ def sync_zerodha_holdings(
 @router.post("/zerodha/sync-transactions", response_model=schemas.BrokerTransactionsSyncResponse)
 def sync_zerodha_transactions(
     portfolio_id: int = Query(...),
+    historical: bool = Query(default=False, description="Fetch historical trades (all orders) instead of recent trades only"),
     token: Optional[str] = Query(default=None),
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Sync recent trades from Zerodha into portfolio transactions."""
+    """Sync trades from Zerodha into portfolio transactions."""
+    import logging
+    logger = logging.getLogger(__name__)
+
     try:
         user_id = user.id
 
@@ -347,18 +419,42 @@ def sync_zerodha_transactions(
         if not portfolio or portfolio.user_id != user_id:
             raise ValueError("Portfolio not found")
 
-        access_token = EncryptionManager.decrypt(config.access_token)
-        api_key = EncryptionManager.decrypt(config.api_key or "")
-        api_secret = EncryptionManager.decrypt(config.api_secret or "")
+        # Decrypt access token and create broker instance
+        try:
+            access_token = EncryptionManager.decrypt(config.access_token)
+            api_key = EncryptionManager.decrypt(config.api_key or "")
+            api_secret = EncryptionManager.decrypt(config.api_secret or "")
+            logger.info(f"✓ Credentials decrypted successfully for trades sync")
+        except Exception as decrypt_error:
+            logger.error(f"✗ Failed to decrypt credentials: {str(decrypt_error)}")
+            raise ValueError(f"Failed to decrypt Zerodha credentials: {str(decrypt_error)}")
 
+        # Log credential details for debugging (not the actual values)
+        logger.debug(f"📋 API key: length={len(api_key)}, non-empty={bool(api_key.strip())}")
+        logger.debug(f"📋 API secret: length={len(api_secret)}, non-empty={bool(api_secret.strip())}")
+        logger.debug(f"📋 Access token: length={len(access_token)}, non-empty={bool(access_token.strip())}")
+
+        logger.info(f"🔐 Creating ZerodhaBroker for trades sync")
         broker = ZerodhaBroker(api_key=api_key, api_secret=api_secret)
         broker.set_token(access_token)
-        trades = broker.get_trades()
+        
+        if historical:
+            logger.info(f"🔐 Fetching HISTORICAL trades from Zerodha (using orders API)")
+            trades = broker.get_historical_trades()
+            logger.info(f"✓ Successfully fetched {len(trades)} historical trades from Zerodha")
+        else:
+            logger.info(f"🔐 Fetching recent trades from Zerodha")
+            trades = broker.get_trades()
+            logger.info(f"✓ Successfully fetched {len(trades)} recent trades from Zerodha")
+
+        if not trades:
+            logger.info(f"ℹ️  No trades found in Zerodha account")
 
         imported = 0
-        for trade in trades:
+        for idx, trade in enumerate(trades):
             symbol = trade.get("tradingsymbol") or trade.get("symbol") or ""
             if not symbol:
+                logger.debug(f"Trade {idx}: Skipping - no symbol found")
                 continue
 
             tx_type_raw = trade.get("transaction_type") or trade.get("trade_type") or ""
@@ -370,10 +466,13 @@ def sync_zerodha_transactions(
             elif str(tx_type_raw).upper() in {"BUY", "SELL"}:
                 tx_type = str(tx_type_raw).lower()
             else:
+                logger.debug(f"Trade {idx} ({symbol}): Skipping - invalid transaction type: {tx_type_raw}")
                 continue
 
             quantity = trade.get("quantity") or 0
             price = trade.get("average_price") or trade.get("price") or 0
+
+            logger.debug(f"Trade {idx}: {symbol} {tx_type} {quantity} @ {price}")
 
             # Parse timestamp if available
             ts = trade.get("exchange_timestamp") or trade.get("order_timestamp") or trade.get("trade_timestamp")
@@ -423,11 +522,13 @@ def sync_zerodha_transactions(
                 .first()
             )
             if existing:
+                logger.debug(f"Trade {idx}: {symbol} - duplicate, skipping")
                 continue
 
             note = trade.get("trade_id")
             notes = f"Imported from Zerodha trade {note}" if note else "Imported from Zerodha"
 
+            logger.debug(f"Trade {idx}: Creating transaction for {symbol} {tx_type} {quantity} @ {price}")
             tx = TransactionModel(
                 portfolio_id=portfolio_id,
                 asset_id=asset.id,
@@ -442,6 +543,9 @@ def sync_zerodha_transactions(
 
         if imported:
             db.commit()
+            logger.info(f"✓ Successfully imported {imported}/{len(trades)} trades")
+        else:
+            logger.info(f"ℹ️  No new trades to import (0/{len(trades)})")
 
         crud.update_broker_config(db, config.id, last_synced=datetime.now(timezone.utc))
 
@@ -461,6 +565,7 @@ def sync_zerodha_transactions(
 def setup_angel_broker(
     api_key: str = Query(...),
     api_secret: str = Query(...),
+    consent_given: bool = Query(False),
     token: Optional[str] = Query(default=None),
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -484,7 +589,8 @@ def setup_angel_broker(
                 config.id,
                 api_key=EncryptionManager.encrypt(api_key),
                 api_secret=EncryptionManager.encrypt(api_secret),
-                broker_user_id=profile.get("user_id", "")
+                broker_user_id=profile.get("user_id", ""),
+                consent_given=consent_given,
             )
         else:
             config = crud.create_broker_config(
@@ -493,7 +599,8 @@ def setup_angel_broker(
                 broker_name="angel",
                 broker_user_id=profile.get("user_id", ""),
                 api_key=EncryptionManager.encrypt(api_key),
-                api_secret=EncryptionManager.encrypt(api_secret)
+                api_secret=EncryptionManager.encrypt(api_secret),
+                consent_given=consent_given,
             )
         
         return {
@@ -598,6 +705,7 @@ def setup_fivepaisa_broker(
     app_source: str = Query(..., description="5Paisa App Source"),
     user_id_5p: str = Query(..., description="5Paisa User ID"),
     password: str = Query(..., description="5Paisa Password"),
+    consent_given: bool = Query(False),
     token: Optional[str] = Query(default=None),
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -640,7 +748,8 @@ def setup_fivepaisa_broker(
                 api_key=EncryptionManager.encrypt(user_key),
                 api_secret=EncryptionManager.encrypt(encryption_key),
                 extra_config=encrypted_extra,
-                broker_user_id=profile.get("user_id", user_id_5p)
+                broker_user_id=profile.get("user_id", user_id_5p),
+                consent_given=consent_given,
             )
         else:
             config = crud.create_broker_config(
@@ -651,6 +760,7 @@ def setup_fivepaisa_broker(
                 api_key=EncryptionManager.encrypt(user_key),
                 api_secret=EncryptionManager.encrypt(encryption_key),
                 extra_config=encrypted_extra,
+                consent_given=consent_given,
             )
         
         return {

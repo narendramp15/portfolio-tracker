@@ -8,6 +8,7 @@ import { type Portfolio } from '../../types/domain'
 import { useAppStore } from '../../store/appStore'
 import { Card } from '../components/Card'
 import { StockSearch } from '../components/StockSearch'
+import { TransactionForm } from '../components/TransactionForm'
 
 async function fetchPortfolios() {
   const { data } = await api.get<Portfolio[]>('/portfolio/')
@@ -22,6 +23,8 @@ export function HoldingsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
+  const [isTransactionOpen, setIsTransactionOpen] = useState(false)
+  const [selectedPortfolioForTransaction, setSelectedPortfolioForTransaction] = useState<Portfolio | null>(null)
   const [editingAsset, setEditingAsset] = useState<typeof holdings[number] | null>(null)
 
   const [createName, setCreateName] = useState('')
@@ -443,13 +446,39 @@ export function HoldingsPage() {
                   {holdings.length}
                 </span>
               </div>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-                <input
-                  className="h-9 w-[200px] rounded-xl border border-border bg-bg pl-9 pr-3 text-sm outline-none transition-all focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-                  placeholder="Search holdings..."
-                  type="search"
-                />
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                  <input
+                    className="h-9 w-[200px] rounded-xl border border-border bg-bg pl-9 pr-3 text-sm outline-none transition-all focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                    placeholder="Search holdings..."
+                    type="search"
+                  />
+                </div>
+                <button
+                  onClick={() => setIsAddOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-border bg-bg px-4 py-2 text-sm font-semibold hover:bg-surface"
+                  title="Add a new holding"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Holding
+                </button>
+                <button
+                  onClick={() => {
+                    const portfolio = selectedPortfolioId
+                      ? portfolios.find(p => p.id === selectedPortfolioId)
+                      : portfolios[0]
+                    if (portfolio) {
+                      setSelectedPortfolioForTransaction(portfolio)
+                      setIsTransactionOpen(true)
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25"
+                  title="Record a transaction"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Transaction
+                </button>
               </div>
             </div>
 
@@ -841,6 +870,17 @@ export function HoldingsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {isTransactionOpen && selectedPortfolioForTransaction && (
+        <TransactionForm
+          portfolios={portfolios}
+          initialPortfolio={selectedPortfolioForTransaction}
+          onClose={() => {
+            setIsTransactionOpen(false)
+            setSelectedPortfolioForTransaction(null)
+          }}
+        />
       )}
     </div>
   )

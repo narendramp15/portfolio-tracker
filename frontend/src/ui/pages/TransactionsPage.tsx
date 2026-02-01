@@ -1,21 +1,30 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Filter, Search, Download } from 'lucide-react'
+import { Filter, Search, Download, Plus } from 'lucide-react'
 
 import { api } from '../../lib/api.ts'
 import { formatCurrencyINR } from '../../lib/format.ts'
-import { type TransactionRow } from '../../types/domain'
+import { type TransactionRow, type Portfolio } from '../../types/domain'
 import { Card } from '../components/Card'
+import { TransactionForm } from '../components/TransactionForm'
 
 async function fetchTransactions() {
   const { data } = await api.get<TransactionRow[]>('/transactions/')
   return data
 }
 
+async function fetchPortfolios() {
+  const { data } = await api.get<Portfolio[]>('/portfolio/')
+  return data
+}
+
 export function TransactionsPage() {
   const query = useQuery({ queryKey: ['transactions'], queryFn: fetchTransactions })
+  const portfoliosQuery = useQuery({ queryKey: ['portfolios'], queryFn: fetchPortfolios })
   const [type, setType] = useState<string>('all')
   const [q, setQ] = useState('')
+  const [isTransactionOpen, setIsTransactionOpen] = useState(false)
+  const [selectedPortfolioForTransaction, setSelectedPortfolioForTransaction] = useState<Portfolio | null>(null)
 
   const rows = useMemo(() => {
     const list = query.data ?? []
@@ -87,6 +96,22 @@ export function TransactionsPage() {
               <Download className="h-4 w-4" />
               Export CSV
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                const portfolios = portfoliosQuery.data ?? []
+                if (portfolios.length === 0) {
+                  alert('Please create a portfolio first')
+                  return
+                }
+                setIsTransactionOpen(true)
+              }}
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25"
+              title="Add a new transaction"
+            >
+              <Plus className="h-4 w-4" />
+              Add Transaction
+            </button>
           </div>
         </div>
       </div>
@@ -100,7 +125,7 @@ export function TransactionsPage() {
       ) : rows.length === 0 ? (
         <Card>
           <div className="text-sm font-semibold">No transactions yet</div>
-          <div className="mt-1 text-sm text-muted">Add a transaction or import a CSV (coming soon).</div>
+          <div className="mt-1 text-sm text-muted">Click "Add Transaction" to record your first trade, or sync from your broker.</div>
         </Card>
       ) : (
         <Card className="p-0">
@@ -151,6 +176,13 @@ export function TransactionsPage() {
             </table>
           </div>
         </Card>
+      )}
+
+      {isTransactionOpen && (
+        <TransactionForm
+          portfolios={portfoliosQuery.data ?? []}
+          onClose={() => setIsTransactionOpen(false)}
+        />
       )}
     </div>
   )

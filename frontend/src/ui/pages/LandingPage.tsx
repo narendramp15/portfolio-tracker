@@ -175,7 +175,7 @@ export function LandingPage() {
                                     <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
                                 </button>
                                 <button
-                                    onClick={() => window.open('https://youtu.be/demo', '_blank')}
+                                    onClick={() => window.open('https://youtu.be/Kzm3f9ac5b8', '_blank')}
                                     className="px-8 py-4 text-lg font-semibold text-indigo-700 bg-indigo-50 border-2 border-indigo-100 rounded-xl hover:bg-indigo-100 hover:border-indigo-200 transition-all flex items-center justify-center gap-2"
                                 >
                                     <Play className="h-5 w-5 fill-indigo-600" />
@@ -602,7 +602,7 @@ export function LandingPage() {
                         <ul className="space-y-4 mb-8 opacity-70">
                             <PricingFeature text="Everything in Free, plus:" included />
                             <PricingFeature text="Price alerts (email + push)" coming />
-                            <PricingFeature text="Advanced AI recommendations" coming />
+                            <PricingFeature text="Advanced AI Technical Signals" coming />
                             <PricingFeature text="Mutual fund tracking" coming />
                             <PricingFeature text="Goal-based investing" coming />
                             <PricingFeature text="Family portfolio linking" coming />
@@ -854,6 +854,25 @@ export function LandingPage() {
             {/* Footer */}
             <footer className="border-t border-border bg-surface py-8">
                 <div className="container mx-auto px-4 text-center text-sm text-muted">
+                    <div className="flex flex-col md:flex-row items-center justify-center gap-4 mb-4">
+                        <a
+                            href="/docs/terms-and-conditions.html"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-indigo-600 hover:text-indigo-500 transition-colors"
+                        >
+                            Terms and Conditions
+                        </a>
+                        <span className="hidden md:block text-slate-400">•</span>
+                        <a
+                            href="/docs/terms-and-conditions.html#privacy-policy-integrated"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-indigo-600 hover:text-indigo-500 transition-colors"
+                        >
+                            Privacy Policy
+                        </a>
+                    </div>
                     <p>&copy; 2026 QuantLeap. Built for Indian investors. All rights reserved.</p>
                     <p className="mt-2">Powered by FastAPI & React</p>
                 </div>

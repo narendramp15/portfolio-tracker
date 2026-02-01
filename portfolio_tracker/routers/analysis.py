@@ -65,19 +65,19 @@ def generate_ai_recommendation(symbol: str, name: str, indicators: dict, current
     # RSI Analysis (Real data)
     rsi = indicators['rsi']
     if rsi < 30:
-        signals.append(f"RSI at {rsi:.1f} - oversold territory, potential buying opportunity")
+        signals.append(f"RSI at {rsi:.1f} - in oversold zone (below 30), historically associated with potential reversals")
         bullish_score += 2
     elif rsi < 40:
-        signals.append(f"RSI at {rsi:.1f} - approaching oversold, showing weakness")
+        signals.append(f"RSI at {rsi:.1f} - approaching oversold levels")
         bullish_score += 1
     elif rsi > 70:
-        signals.append(f"RSI at {rsi:.1f} - overbought territory, consider taking profits")
+        signals.append(f"RSI at {rsi:.1f} - in overbought zone (above 70), historically associated with potential pullbacks")
         bearish_score += 2
     elif rsi > 60:
-        signals.append(f"RSI at {rsi:.1f} - approaching overbought, showing strength")
+        signals.append(f"RSI at {rsi:.1f} - approaching overbought levels")
         bullish_score += 1
     else:
-        signals.append(f"RSI at {rsi:.1f} - neutral momentum")
+        signals.append(f"RSI at {rsi:.1f} - in neutral zone (30-70)")
     
     # MACD Analysis (Real data)
     macd = indicators['macd']
@@ -165,46 +165,40 @@ def generate_ai_recommendation(symbol: str, name: str, indicators: dict, current
         signals.append(f"Volume drying up ({volume_ratio:.1f}x average) - weak conviction")
         bearish_score += 1
     
-    # Current Position Analysis
+    # Current Position Analysis (educational only)
     return_pct = ((current_price - purchase_price) / purchase_price) * 100
     if return_pct > 30:
-        signals.append(f"Position up {return_pct:.1f}% - consider booking partial profits")
-        bearish_score += 1
+        signals.append(f"Position shows {return_pct:.1f}% unrealized gain")
     elif return_pct > 15:
-        signals.append(f"Position up {return_pct:.1f}% - healthy gain, trail stop-loss")
+        signals.append(f"Position shows {return_pct:.1f}% unrealized gain")
     elif return_pct < -15:
-        signals.append(f"Position down {return_pct:.1f}% - review thesis, consider stop-loss")
-        bearish_score += 1
+        signals.append(f"Position shows {return_pct:.1f}% unrealized loss")
     elif return_pct < -5:
-        signals.append(f"Position down {return_pct:.1f}% - monitor closely")
+        signals.append(f"Position shows {return_pct:.1f}% unrealized loss")
     
-    # Calculate final recommendation
+    # Calculate final recommendation - now as educational signals only
     total_score = bullish_score - bearish_score
     
-    # Data quality bonus - more confident with more data
-    data_points = indicators.get('data_points', 0)
-    confidence_base = 50 if data_points < 50 else 60 if data_points < 100 else 65
-    
     if total_score >= 5:
-        recommendation = "strong_buy"
-        action_text = "Strong Buy"
-        confidence = min(95, confidence_base + 25 + (total_score * 2))
+        recommendation = "strong_bullish"
+        action_text = "Strong Bullish Signal"
+        confidence = 0  # Remove confidence to avoid performance claims
     elif total_score >= 2:
-        recommendation = "buy"
-        action_text = "Buy"
-        confidence = min(85, confidence_base + 15 + (total_score * 3))
+        recommendation = "bullish"
+        action_text = "Bullish Signal"
+        confidence = 0
     elif total_score <= -5:
-        recommendation = "strong_sell"
-        action_text = "Strong Sell"
-        confidence = min(95, confidence_base + 25 + (abs(total_score) * 2))
+        recommendation = "strong_bearish"
+        action_text = "Strong Bearish Signal"
+        confidence = 0
     elif total_score <= -2:
-        recommendation = "sell"
-        action_text = "Sell"
-        confidence = min(85, confidence_base + 15 + (abs(total_score) * 3))
+        recommendation = "bearish"
+        action_text = "Bearish Signal"
+        confidence = 0
     else:
-        recommendation = "hold"
-        action_text = "Hold"
-        confidence = confidence_base + 5
+        recommendation = "neutral"
+        action_text = "Neutral Signal"
+        confidence = 0
     
     return {
         'recommendation': recommendation,

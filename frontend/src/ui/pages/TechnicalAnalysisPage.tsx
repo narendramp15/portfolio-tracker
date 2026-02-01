@@ -42,7 +42,6 @@ interface TechnicalAnalysis {
   indicators: TechnicalIndicators;
   recommendation: string;
   action_text: string;
-  confidence: number;
   signals: string[];
   bullish_factors: number;
   bearish_factors: number;
@@ -51,22 +50,22 @@ interface TechnicalAnalysis {
 // Helper functions
 const getRecommendationColor = (recommendation: string): string => {
   switch (recommendation) {
-    case 'strong_buy': return 'text-green-600 bg-green-50 border-green-200 dark:text-green-400 dark:bg-green-950/20 dark:border-green-800';
-    case 'buy': return 'text-green-600 bg-green-50 border-green-200 dark:text-green-400 dark:bg-green-950/20 dark:border-green-800';
-    case 'hold': return 'text-yellow-600 bg-yellow-50 border-yellow-200 dark:text-yellow-400 dark:bg-yellow-950/20 dark:border-yellow-800';
-    case 'sell': return 'text-red-600 bg-red-50 border-red-200 dark:text-red-400 dark:bg-red-950/20 dark:border-red-800';
-    case 'strong_sell': return 'text-red-600 bg-red-50 border-red-200 dark:text-red-400 dark:bg-red-950/20 dark:border-red-800';
+    case 'strong_bullish': return 'text-green-600 bg-green-50 border-green-200 dark:text-green-400 dark:bg-green-950/20 dark:border-green-800';
+    case 'bullish': return 'text-green-600 bg-green-50 border-green-200 dark:text-green-400 dark:bg-green-950/20 dark:border-green-800';
+    case 'neutral': return 'text-yellow-600 bg-yellow-50 border-yellow-200 dark:text-yellow-400 dark:bg-yellow-950/20 dark:border-yellow-800';
+    case 'bearish': return 'text-red-600 bg-red-50 border-red-200 dark:text-red-400 dark:bg-red-950/20 dark:border-red-800';
+    case 'strong_bearish': return 'text-red-600 bg-red-50 border-red-200 dark:text-red-400 dark:bg-red-950/20 dark:border-red-800';
     default: return 'text-muted bg-border/20 border-border';
   }
 };
 
 const getRecommendationIcon = (recommendation: string) => {
   switch (recommendation) {
-    case 'strong_buy':
-    case 'buy':
+    case 'strong_bullish':
+    case 'bullish':
       return <ArrowUpRight className="w-4 h-4" />;
-    case 'sell':
-    case 'strong_sell':
+    case 'bearish':
+    case 'strong_bearish':
       return <ArrowDownRight className="w-4 h-4" />;
     default:
       return <Activity className="w-4 h-4" />;
@@ -139,11 +138,37 @@ export default function TechnicalAnalysisPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 via-purple-300 to-indigo-500 bg-clip-text text-transparent">
-            Technical Analysis & AI Recommendations
+            Technical Analysis & AI Technical Signals
           </h1>
           <p className="text-muted mt-1">
-            AI-powered technical analysis with buy/sell signals
+            Technical indicators and market analysis for educational purposes
           </p>
+          <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg dark:bg-amber-950/20 dark:border-amber-800">
+            <div className="flex items-start gap-3">
+              <div className="text-amber-600 dark:text-amber-400 mt-0.5">
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="text-sm text-amber-800 dark:text-amber-200">
+                <p className="font-medium mb-2">Important Disclaimer</p>
+                <p className="mb-2">
+                  This analysis is for educational purposes only and does not constitute investment advice or recommendations.
+                  The signals shown (buy/sell/hold) are based on technical indicators and should not be considered as personalized
+                  investment recommendations.
+                </p>
+                <p className="mb-2">
+                  <strong>To avoid regulatory requirements:</strong> These are presented as indicator summaries (bullish/bearish signals)
+                  rather than actionable advice. No performance claims are made, and this is purely educational content showing
+                  how technical indicators work.
+                </p>
+                <p>
+                  Always consult with a SEBI-registered investment advisor for personalized investment decisions.
+                  Past performance does not guarantee future results.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* View Toggle Buttons */}
@@ -195,7 +220,7 @@ export default function TechnicalAnalysisPage() {
                     MACD
                   </th>
                   <th className="px-6 py-4 text-center text-xs font-semibold text-text uppercase tracking-wider">
-                    AI Recommendation
+                    AI Technical Signals
                   </th>
                 </tr>
               </thead>
@@ -250,7 +275,7 @@ export default function TechnicalAnalysisPage() {
                           {(analysis.recommendation ?? 'hold').replace('_', ' ').toUpperCase()}
                         </span>
                         <span className="text-xs text-muted">
-                          {(analysis.confidence ?? 0).toFixed(0)}% confidence
+                          Signal Strength
                         </span>
                       </div>
                     </td>
@@ -406,7 +431,7 @@ export default function TechnicalAnalysisPage() {
                 <div className="space-y-3 pt-3 border-t border-border">
                   <h4 className="text-sm font-semibold text-text flex items-center gap-2">
                     <TrendingUp className="w-4 h-4" />
-                    AI Recommendation
+                    AI Technical Signals
                   </h4>
 
                   {/* Recommendation Badge */}
@@ -417,7 +442,7 @@ export default function TechnicalAnalysisPage() {
                       {(analysis.recommendation ?? 'hold').replace('_', ' ').toUpperCase()}
                     </span>
                     <div className="text-xs text-muted mt-2">
-                      Confidence: {(analysis.confidence ?? 0).toFixed(0)}%
+                      Technical Signal Summary
                     </div>
                   </div>
 

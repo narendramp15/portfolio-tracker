@@ -194,14 +194,14 @@ export function TechnicalAnalysisDetailPage() {
                             </div>
                         </div>
 
-                        {/* AI Recommendation */}
+                        {/* AI Technical Signals */}
                         <Card className={`bg-gradient-to-br ${getRecommendationColor(item.recommendation)} border-none`}>
                             <div className="flex items-center gap-3">
                                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-black/30 flex-shrink-0">
                                     {getRecommendationIcon(item.recommendation)}
                                 </div>
                                 <div className="flex-1">
-                                    <div className="text-xs font-bold uppercase tracking-wider text-white/70">AI Recommendation</div>
+                                    <div className="text-xs font-bold uppercase tracking-wider text-white/70">AI Technical Signals</div>
                                     <div className="text-lg font-black text-white">{item.action_text}</div>
                                     <div className="text-xs text-white/60 mt-1">Confidence: {item.confidence}%</div>
                                 </div>

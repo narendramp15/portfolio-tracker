@@ -119,6 +119,18 @@ export function RegisterPage() {
               </div>
             </div>
 
+            <div className="text-xs text-indigo-400/70 text-center">
+              By creating an account, you agree to our{' '}
+              <a
+                href="/docs/terms-and-conditions.html"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-indigo-400 hover:text-indigo-300 underline transition-colors"
+              >
+                Terms and Conditions
+              </a>
+            </div>
+
             <button
               className="w-full rounded-lg bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 px-4 py-3 text-sm font-bold text-white shadow-lg hover:shadow-2xl hover:shadow-indigo-500/20 disabled:opacity-60 transition-all duration-200 mt-6 hover:scale-105 active:scale-95"
               type="submit"

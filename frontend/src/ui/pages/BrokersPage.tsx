@@ -92,6 +92,19 @@ export function BrokersPage() {
     },
   })
 
+  const syncHistoricalTrades = useMutation({
+    mutationFn: async () => {
+      if (!resolvedPortfolioId) throw new Error('Select a portfolio first')
+      const { data } = await api.post('/broker/zerodha/sync-transactions', undefined, {
+        params: { portfolio_id: resolvedPortfolioId, historical: true },
+      })
+      return data
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['transactions'] })
+    },
+  })
+
   const connectedBrokerList = query.data ?? []
 
   useEffect(() => {
@@ -220,11 +233,26 @@ export function BrokersPage() {
               title={
                 syncBrokerName !== 'zerodha'
                   ? 'Trades sync is currently only available for Zerodha'
-                  : 'Imports recent Zerodha trades into Transactions'
+                  : 'Imports recent Zerodha trades (last ~2 weeks) into Transactions'
               }
             >
               <RefreshCcw className="h-4 w-4" />
               {syncTrades.isPending ? 'Syncing…' : 'Sync trades'}
+            </button>
+
+            <button
+              type="button"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-600/40 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-600 hover:bg-amber-500/20 disabled:opacity-60"
+              disabled={!resolvedPortfolioId || syncHistoricalTrades.isPending || syncBrokerName !== 'zerodha'}
+              onClick={() => syncHistoricalTrades.mutate()}
+              title={
+                syncBrokerName !== 'zerodha'
+                  ? 'Historical trades sync is currently only available for Zerodha'
+                  : 'Imports ALL historical trades from Zerodha (potentially years of data)'
+              }
+            >
+              <RefreshCcw className="h-4 w-4" />
+              {syncHistoricalTrades.isPending ? 'Syncing…' : 'Sync all trades'}
             </button>
           </div>
         </div>
@@ -239,17 +267,19 @@ export function BrokersPage() {
           </div>
         ) : null}
 
-        {(syncHoldings.isError || syncTrades.isError) && (
+        {(syncHoldings.isError || syncTrades.isError || syncHistoricalTrades.isError) && (
           <div className="mt-3 text-sm text-danger">
             {(syncHoldings.error as any)?.response?.data?.detail ??
               (syncTrades.error as any)?.response?.data?.detail ??
+              (syncHistoricalTrades.error as any)?.response?.data?.detail ??
               (syncHoldings.error as Error)?.message ??
               (syncTrades.error as Error)?.message ??
+              (syncHistoricalTrades.error as Error)?.message ??
               'Sync failed'}
           </div>
         )}
 
-        {(syncHoldings.isSuccess || syncTrades.isSuccess) && (
+        {(syncHoldings.isSuccess || syncTrades.isSuccess || syncHistoricalTrades.isSuccess) && (
           <div className="mt-3 text-sm text-success">Sync completed.</div>
         )}
       </Card>
@@ -310,7 +340,7 @@ export function BrokersPage() {
               ? (isAuthorized ? 'text-green-500' : 'text-amber-500')
               : 'text-muted'
             return (
-              <Card key={broker.key} className={isConnected && isAuthorized ? 'opacity-50' : ''}>
+              <Card key={broker.key} className="">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-2xl">{broker.icon}</span>
@@ -339,6 +369,23 @@ export function BrokersPage() {
                       className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 px-4 py-2 text-sm font-bold text-white hover:shadow-lg transition-all"
                     >
                       Login to {broker.name}
+                    </button>
+                  )}
+                  {isConnected && isAuthorized && (broker.key === 'zerodha' || broker.key === 'fivepaisa') && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          const { data } = await api.get<{ login_url: string }>(`/broker/${broker.key}/login-url`)
+                          window.location.href = data.login_url
+                        } catch (err) {
+                          console.error('Failed to get login URL:', err)
+                        }
+                      }}
+                      className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-fg hover:shadow-lg transition-all"
+                      title="Get fresh access token (especially useful if token expired)"
+                    >
+                      <RefreshCcw className="h-4 w-4" />
+                      Reconnect
                     </button>
                   )}
                 </div>

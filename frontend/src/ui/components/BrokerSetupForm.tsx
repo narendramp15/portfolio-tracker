@@ -35,6 +35,7 @@ export function BrokerSetupForm({ brokerType, brokerName, onSuccess }: BrokerSet
     const [appSource, setAppSource] = useState('')
     const [userId5p, setUserId5p] = useState('')
     const [password5p, setPassword5p] = useState('')
+    const [consentGiven, setConsentGiven] = useState(false)
 
     const isFivePaisa = brokerType === 'fivepaisa'
 
@@ -53,10 +54,12 @@ export function BrokerSetupForm({ brokerType, brokerName, onSuccess }: BrokerSet
                     app_source: appSource,
                     user_id_5p: userId5p,
                     password: password5p,
+                    consent_given: consentGiven.toString(),
                 }
                 : {
                     api_key: apiKey,
                     api_secret: apiSecret,
+                    consent_given: consentGiven.toString(),
                 }
 
             const response = await api.post(`/broker/${brokerType}/setup`, undefined, { params })
@@ -71,6 +74,7 @@ export function BrokerSetupForm({ brokerType, brokerName, onSuccess }: BrokerSet
                 setAppSource('')
                 setUserId5p('')
                 setPassword5p('')
+                setConsentGiven(false)
                 setIsOpen(false)
                 onSuccess?.()
 
@@ -210,10 +214,28 @@ export function BrokerSetupForm({ brokerType, brokerName, onSuccess }: BrokerSet
 
                 {error && <div className="rounded-lg bg-danger/15 px-3 py-2 text-xs text-danger">{error}</div>}
 
+                <div className="flex items-start gap-2">
+                    <input
+                        type="checkbox"
+                        id="consent"
+                        checked={consentGiven}
+                        onChange={(e) => setConsentGiven(e.target.checked)}
+                        className="mt-0.5"
+                        required
+                    />
+                    <label htmlFor="consent" className="text-xs text-muted">
+                        I consent to the collection and processing of my financial data from {brokerName} for portfolio tracking purposes. I understand my data will be encrypted and used only as described in the{' '}
+                        <a href="/docs/terms-and-conditions.html" target="_blank" rel="noopener noreferrer" className="text-primary underline">
+                            Terms and Conditions
+                        </a>
+                        . I can withdraw this consent at any time.
+                    </label>
+                </div>
+
                 <div className="flex gap-2 pt-2">
                     <button
                         type="submit"
-                        disabled={isLoading}
+                        disabled={isLoading || !consentGiven}
                         className="flex-1 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 transition flex items-center justify-center gap-2"
                     >
                         {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}

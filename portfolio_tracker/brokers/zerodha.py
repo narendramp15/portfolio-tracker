@@ -1,7 +1,7 @@
 """Zerodha KiteConnect broker integration."""
 
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, List, Optional
 
@@ -97,7 +97,13 @@ class ZerodhaBroker:
 
             return holdings
         except Exception as e:
-            raise ValueError(f"Failed to fetch holdings: {str(e)}")
+            # Add more detailed error information
+            error_msg = f"Failed to fetch holdings: {str(e)}"
+            if hasattr(e, 'code'):
+                error_msg += f" (Error code: {e.code})"
+            if hasattr(e, 'message'):
+                error_msg += f" (Message: {e.message})"
+            raise ValueError(error_msg)
 
     def get_profile(self) -> dict:
         """
@@ -107,8 +113,16 @@ class ZerodhaBroker:
             User profile information
         """
         try:
-            return self.kite.profile()
+            profile = self.kite.profile()
+            return profile
         except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to fetch profile: {str(e)}")
+            if hasattr(e, 'code'):
+                logger.error(f"  Error code: {e.code}")
+            if hasattr(e, 'message'):
+                logger.error(f"  Error message: {e.message}")
             raise ValueError(f"Failed to fetch profile: {str(e)}")
 
     def get_trades(self) -> list[dict[str, Any]]:
@@ -124,4 +138,59 @@ class ZerodhaBroker:
                 return []
             return trades
         except Exception as e:
-            raise ValueError(f"Failed to fetch trades: {str(e)}")
+            import logging
+            logger = logging.getLogger(__name__)
+            error_details = f"{str(e)}"
+            if hasattr(e, 'code'):
+                error_details += f" (code: {e.code})"
+            if hasattr(e, 'message'):
+                error_details += f" (message: {e.message})"
+            logger.error(f"Failed to fetch trades: {error_details}")
+            raise ValueError(f"Failed to fetch trades: {error_details}")
+
+    def get_historical_trades(self, days_back: int = 90) -> list[dict[str, Any]]:
+        """
+        Fetch historical trades using the orders API.
+        
+        KiteConnect.trades() only returns recent trades (last ~2 weeks).
+        This method uses orders() to fetch historical orders and extracts filled trades.
+
+        Args:
+            days_back: Number of days to look back (default 90 days)
+
+        Returns:
+            List of trade dicts from KiteConnect orders.
+        """
+        try:
+            import logging
+            logger = logging.getLogger(__name__)
+            
+            # Fetch all orders (this includes cancelled/pending orders too)
+            orders = self.kite.orders()
+            if not isinstance(orders, list):
+                logger.warning("Orders API returned non-list response")
+                return []
+            
+            logger.info(f"📊 Retrieved {len(orders)} total orders from Zerodha")
+            
+            # Filter to only COMPLETE orders that represent executed trades
+            # These are the orders that actually went through
+            trades = []
+            for order in orders:
+                # Only include completed orders
+                if order.get("status") == "COMPLETE":
+                    trades.append(order)
+            
+            logger.info(f"📊 Filtered to {len(trades)} completed orders (executed trades)")
+            return trades
+            
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            error_details = f"{str(e)}"
+            if hasattr(e, 'code'):
+                error_details += f" (code: {e.code})"
+            if hasattr(e, 'message'):
+                error_details += f" (message: {e.message})"
+            logger.error(f"Failed to fetch historical trades: {error_details}")
+            raise ValueError(f"Failed to fetch historical trades: {error_details}")

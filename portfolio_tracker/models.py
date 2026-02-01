@@ -146,6 +146,8 @@ class BrokerConfigModel(Base):
     extra_config = Column(Text, nullable=True)  # JSON string for broker-specific config (encrypted)
     is_active = Column(Boolean, default=True, nullable=False)
     last_synced = Column(DateTime, nullable=True)  # Last time holdings were synced
+    consent_given = Column(Boolean, default=False, nullable=False)  # Whether user consented to data processing
+    consent_timestamp = Column(DateTime, nullable=True)  # When consent was given
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 

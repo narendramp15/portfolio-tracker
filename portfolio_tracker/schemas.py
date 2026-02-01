@@ -290,7 +290,6 @@ class TechnicalAnalysis(BaseModel):
     indicators: dict
     recommendation: str
     action_text: str
-    confidence: int
     signals: list[str]
     bullish_factors: int
     bearish_factors: int
