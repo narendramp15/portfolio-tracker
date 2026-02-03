@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { BarChart3, Briefcase, CreditCard, LayoutDashboard, Link2, Settings, TrendingUp } from 'lucide-react'
+import { BarChart3, Briefcase, CreditCard, FileText, LayoutDashboard, Link2, Settings, TrendingUp } from 'lucide-react'
 
 import { cn } from '../../lib/cn'
 
@@ -8,6 +8,7 @@ const nav = [
   { to: '/app/holdings', label: 'Holdings', icon: Briefcase },
   { to: '/app/transactions', label: 'Transactions', icon: CreditCard },
   { to: '/app/analysis', label: 'Analysis', icon: TrendingUp },
+  { to: '/app/tax-reports', label: 'Tax Reports', icon: FileText },
   { to: '/app/brokers', label: 'Brokers', icon: Link2 },
   { to: '/app/settings', label: 'Settings', icon: Settings },
 ]

@@ -156,17 +156,35 @@ class Settings:
     @property
     def CORS_ORIGINS(self) -> list[str]:
         """Allowed CORS origins."""
-        origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:8000")
-        origin_list = [origin.strip() for origin in origins.split(",") if origin.strip()]
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        origins_env = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:8000")
+        origin_list = [origin.strip() for origin in origins_env.split(",") if origin.strip()]
         
         # Also add FRONTEND_URL if set and not already included
         frontend = self.FRONTEND_URL
         if frontend and frontend not in origin_list:
             origin_list.append(frontend)
         
+        # Validate origins - never allow "*" with credentials
+        if "*" in origin_list and len(origin_list) > 1:
+            # If "*" is in the list along with other origins, remove "*" for security
+            origin_list.remove("*")
+            logger.warning("CORS_ORIGINS contains '*' with other origins. Removing '*' for security.")
+        
+        if "*" in origin_list and not self._testing:
+            # If "*" is the only origin and we're not in testing, warn about security
+            logger.warning(
+                "SECURITY WARNING: CORS_ORIGINS is set to '*'. This is insecure when "
+                "allow_credentials=True. Never use '*' in production!"
+            )
+        
         # Automatically add www and non-www variants for each origin
         expanded_origins = set(origin_list)
         for origin in origin_list:
+            if origin == "*":
+                continue  # Skip "*" for variant expansion
             # Add www variant if it's a non-www domain
             if "://" in origin and not origin.split("://")[1].startswith("www.") and not origin.split("://")[1].startswith("localhost"):
                 www_variant = origin.replace("://", "://www.")

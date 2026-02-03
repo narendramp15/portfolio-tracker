@@ -327,9 +327,9 @@ export function LandingPage() {
                                 </div>
                                 Zerodha
                             </div>
-                            <div className="flex items-center gap-2 text-lg font-semibold text-slate-600">
-                                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 font-bold">A</div>
-                                Angel One
+                            <div className="flex items-center gap-2 text-lg font-semibold text-slate-400 opacity-50 cursor-not-allowed" title="Coming soon">
+                                <div className="w-10 h-10 rounded-lg bg-blue-100/50 flex items-center justify-center text-blue-600/50 font-bold grayscale">A</div>
+                                <span className="text-slate-400">Angel One</span>
                             </div>
                             <div className="flex items-center gap-2 text-lg font-semibold text-slate-600">
                                 <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600 font-bold">5</div>
@@ -567,7 +567,7 @@ export function LandingPage() {
 
                         <ul className="space-y-4 mb-8">
                             <PricingFeature text="Unlimited portfolios" included />
-                            <PricingFeature text="Connect all 3 brokers (Zerodha, Angel, 5Paisa)" included />
+                            <PricingFeature text="Connect 2 brokers (Zerodha, 5Paisa)" included />
                             <PricingFeature text="Real-time P&L tracking" included />
                             <PricingFeature text="Technical indicators (RSI, MACD)" included />
                             <PricingFeature text="Tax reports (STCG/LTCG)" included />

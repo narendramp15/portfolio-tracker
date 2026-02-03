@@ -14,8 +14,9 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from portfolio_tracker.config import settings
 from portfolio_tracker.database import create_tables
-from portfolio_tracker.routers import (analysis, auth, broker, dashboard,
-                                       market, portfolio, transactions)
+from portfolio_tracker.routers import (analysis, auth, broker,
+                                       broker_token_refresh, dashboard, market,
+                                       portfolio, tax_reports, transactions)
 
 # Configure logging
 logging.basicConfig(
@@ -45,13 +46,14 @@ class CORSPreflightMiddleware:
             headers = dict(scope.get("headers", []))
             origin = headers.get(b"origin", b"").decode("utf-8")
             
-            logger.info(f"[ASGI] OPTIONS preflight intercepted: {scope['path']}")
-            logger.info(f"[ASGI] Origin: {origin}")
-            logger.info(f"[ASGI] Allowed origins: {settings.CORS_ORIGINS}")
+            logger.debug(f"[ASGI] OPTIONS preflight: {scope['path']} - Origin: {origin}")
             
-            # Check if origin is allowed
-            allowed_origin = origin if origin in settings.CORS_ORIGINS else ""
-            if not allowed_origin and "*" in settings.CORS_ORIGINS:
+            # Check if origin is allowed (use same logic as config)
+            allowed_origin = ""
+            if origin in settings.CORS_ORIGINS:
+                allowed_origin = origin
+            elif "*" in settings.CORS_ORIGINS and settings.CORS_ORIGINS == ["*"]:
+                # Only allow "*" if it's the ONLY origin (already validated in config)
                 allowed_origin = "*"
             
             # Send CORS preflight response directly
@@ -73,7 +75,6 @@ class CORSPreflightMiddleware:
                 "type": "http.response.body",
                 "body": b"",
             })
-            logger.info(f"[ASGI] OPTIONS response sent: {200 if allowed_origin else 403}")
             return
         
         await self.app(scope, receive, send)
@@ -162,6 +163,8 @@ _app.include_router(market.router, prefix="/api/market", tags=["market"])
 _app.include_router(portfolio.router, prefix="/api/portfolio", tags=["portfolio"])
 _app.include_router(broker.router, prefix="/api/broker", tags=["broker"])
 _app.include_router(analysis.router, prefix="/api/analysis", tags=["analysis"])
+_app.include_router(tax_reports.router, prefix="/api", tags=["tax-reports"])
+_app.include_router(broker_token_refresh.router, prefix="/api/broker", tags=["broker-token"])
 
 
 # Public pages (no authentication required)

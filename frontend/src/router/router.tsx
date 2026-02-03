@@ -12,6 +12,7 @@ import { RegisterPage } from '../ui/pages/RegisterPage'
 import { ResetPasswordPage } from '../ui/pages/ResetPasswordPage'
 import { SettingsPage } from '../ui/pages/SettingsPage'
 import TechnicalAnalysisPage from '../ui/pages/TechnicalAnalysisPage'
+import TaxReportsPage from '../ui/pages/TaxReportsPage'
 import { TransactionsPage } from '../ui/pages/TransactionsPage'
 import { AuthCallbackPage } from '../ui/pages/AuthCallbackPage'
 
@@ -35,6 +36,7 @@ export const router = createBrowserRouter([
       { path: 'holdings', element: <HoldingsPage /> },
       { path: 'transactions', element: <TransactionsPage /> },
       { path: 'analysis', element: <TechnicalAnalysisPage /> },
+      { path: 'tax-reports', element: <TaxReportsPage /> },
       { path: 'brokers', element: <BrokersPage /> },
       { path: 'settings', element: <SettingsPage /> },
     ],

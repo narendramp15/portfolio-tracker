@@ -316,12 +316,12 @@ export function BrokersPage() {
             // For non-implemented brokers, show "Coming Soon"
             if (!broker.implemented) {
               return (
-                <Card key={broker.key} className="opacity-60">
+                <Card key={broker.key} className="opacity-50 cursor-not-allowed pointer-events-none">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="text-2xl">{broker.icon}</span>
+                      <span className="text-2xl grayscale">{broker.icon}</span>
                       <div>
-                        <div className="font-semibold text-sm">{broker.name}</div>
+                        <div className="font-semibold text-sm text-muted">{broker.name}</div>
                         <div className="text-xs text-muted">Coming soon</div>
                       </div>
                     </div>

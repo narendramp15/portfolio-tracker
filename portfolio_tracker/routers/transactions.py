@@ -3,9 +3,11 @@
 import csv
 from decimal import Decimal
 from io import StringIO
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from portfolio_tracker import models, schemas
@@ -14,6 +16,68 @@ from portfolio_tracker.deps import get_current_user
 from portfolio_tracker.models import UserModel
 
 router = APIRouter()
+
+
+def get_available_quantity(db: Session, portfolio_id: int, asset_id: int) -> Decimal:
+    """
+    Calculate available quantity for an asset based on transactions.
+    This is the source of truth, not the assets table.
+    """
+    buy_sum = (
+        db.query(func.sum(models.TransactionModel.quantity))
+        .filter(
+            models.TransactionModel.portfolio_id == portfolio_id,
+            models.TransactionModel.asset_id == asset_id,
+            models.TransactionModel.type == 'buy'
+        )
+        .scalar() or Decimal('0')
+    )
+    
+    sell_sum = (
+        db.query(func.sum(models.TransactionModel.quantity))
+        .filter(
+            models.TransactionModel.portfolio_id == portfolio_id,
+            models.TransactionModel.asset_id == asset_id,
+            models.TransactionModel.type == 'sell'
+        )
+        .scalar() or Decimal('0')
+    )
+    
+    return buy_sum - sell_sum
+
+
+@router.get("/available/{portfolio_id}/{asset_id}")
+async def get_asset_available_quantity(
+    portfolio_id: int,
+    asset_id: int,
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get available quantity for an asset (for sell validation)."""
+    # Verify portfolio ownership
+    portfolio = db.query(models.PortfolioModel).filter(
+        models.PortfolioModel.id == portfolio_id,
+        models.PortfolioModel.user_id == user.id
+    ).first()
+    if not portfolio:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+    
+    # Verify asset exists
+    asset = db.query(models.AssetModel).filter(
+        models.AssetModel.id == asset_id,
+        models.AssetModel.portfolio_id == portfolio_id
+    ).first()
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    
+    available_qty = get_available_quantity(db, portfolio_id, asset_id)
+    
+    return {
+        "asset_id": asset_id,
+        "symbol": asset.symbol,
+        "available_quantity": float(available_qty),
+        "display_quantity": float(asset.quantity)  # From assets table for display
+    }
 
 
 @router.get("/export")
@@ -163,6 +227,15 @@ async def create_transaction(
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
 
+    # Validate sell transaction - compute available from transactions
+    if transaction.type.lower() == 'sell':
+        available_qty = get_available_quantity(db, portfolio_id, transaction.asset_id)
+        if available_qty < transaction.quantity:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Insufficient quantity to sell. Available: {available_qty}, Requested: {transaction.quantity}"
+            )
+
     # Create the transaction
     tx = models.TransactionModel(
         portfolio_id=portfolio_id,
@@ -185,8 +258,6 @@ async def create_transaction(
         asset.purchase_price = new_avg_price
     elif transaction.type.lower() == 'sell':
         # For sell: decrease quantity
-        if asset.quantity < transaction.quantity:
-            raise HTTPException(status_code=400, detail="Insufficient quantity to sell")
         asset.quantity = asset.quantity - transaction.quantity
         
         # If quantity becomes 0, we could delete the asset or keep it

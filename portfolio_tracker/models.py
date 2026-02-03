@@ -113,6 +113,14 @@ class TransactionModel(Base):
     portfolio = relationship("PortfolioModel", back_populates="transactions")
     asset = relationship("AssetModel", back_populates="transactions")
 
+    # Composite indexes for common query patterns
+    __table_args__ = (
+        Index('ix_transactions_portfolio_asset', 'portfolio_id', 'asset_id'),
+        Index('ix_transactions_portfolio_type', 'portfolio_id', 'type'),
+        Index('ix_transactions_asset_type', 'asset_id', 'type'),
+        Index('ix_transactions_date', 'transaction_date'),
+    )
+
 
 class BrokerTemplateModel(Base):
     """SQLAlchemy model for Broker API Configuration Template."""
@@ -153,6 +161,12 @@ class BrokerConfigModel(Base):
 
     # Relationships
     owner = relationship("UserModel")
+
+    # Composite indexes for efficient queries
+    __table_args__ = (
+        Index('ix_broker_configs_user_broker', 'user_id', 'broker_name'),
+        Index('ix_broker_configs_active', 'user_id', 'is_active'),
+    )
 
 
 class PriceHistoryModel(Base):

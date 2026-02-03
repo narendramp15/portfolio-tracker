@@ -194,3 +194,58 @@ class ZerodhaBroker:
                 error_details += f" (message: {e.message})"
             logger.error(f"Failed to fetch historical trades: {error_details}")
             raise ValueError(f"Failed to fetch historical trades: {error_details}")
+
+    def refresh_access_token(self, api_secret: str) -> tuple[str, str]:
+        """
+        Refresh the access token using the existing access token.
+        
+        Note: Zerodha doesn't have a traditional refresh token flow.
+        Access tokens remain valid until explicitly revoked by the user.
+        This method attempts to validate the current token and returns new token if valid.
+        
+        Args:
+            api_secret: The API secret used to generate the original token
+            
+        Returns:
+            Tuple of (access_token, None) - Zerodha doesn't return refresh tokens
+            
+        Raises:
+            ValueError: If token cannot be refreshed (user needs to re-authenticate)
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            # Try to validate the current token by making a profile call
+            profile = self.kite.profile()
+            logger.info(f"Zerodha token validated successfully for user: {profile.get('user_name', 'Unknown')}")
+            
+            # Token is valid, return current access token
+            current_token = self.kite.access_token
+            return current_token, None
+            
+        except Exception as e:
+            error_msg = str(e).lower()
+            if '401' in error_msg or 'unauthorized' in error_msg or 'token' in error_msg:
+                logger.warning("Zerodha access token expired or invalid. User needs to re-authenticate.")
+                raise ValueError(
+                    "Zerodha access token has expired. Please reconnect your Zerodha account "
+                    "from the Brokers page to continue syncing."
+                )
+            else:
+                logger.error(f"Failed to validate Zerodha token: {e}")
+                raise ValueError(f"Failed to refresh Zerodha token: {e}")
+
+    def is_token_valid(self) -> bool:
+        """
+        Check if the current access token is still valid.
+        
+        Returns:
+            True if token is valid, False otherwise
+        """
+        try:
+            # Try to make a simple API call to validate the token
+            self.kite.profile()
+            return True
+        except Exception:
+            return False

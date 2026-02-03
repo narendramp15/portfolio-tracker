@@ -20,6 +20,8 @@ class FivePaisaBroker:
         app_source: Optional[str] = None,
         user_id: Optional[str] = None,
         password: Optional[str] = None,
+        access_token: Optional[str] = None,
+        refresh_token: Optional[str] = None,
     ):
         """
         Initialize 5Paisa broker.
@@ -39,6 +41,8 @@ class FivePaisaBroker:
             app_source: 5Paisa App Source
             user_id: 5Paisa User ID
             password: 5Paisa Password
+            access_token: OAuth access token
+            refresh_token: OAuth refresh token
         """
         # Support both naming conventions
         self.user_key = api_key or user_key or ""
@@ -47,11 +51,12 @@ class FivePaisaBroker:
         self.app_source = app_source or ""
         self.user_id = user_id or ""
         self.password = password or ""
+        self.access_token = access_token or None
+        self.refresh_token = refresh_token or None
         
         if not self.user_key:
             raise ValueError("5Paisa User Key (api_key) not configured")
         
-        self.access_token: Optional[str] = None
         self.client_code: Optional[str] = None
         self._client = None
 
@@ -279,6 +284,99 @@ class FivePaisaBroker:
             }
         except Exception as e:
             raise ValueError(f"Failed to fetch profile: {str(e)}")
+
+    def refresh_access_token(self) -> tuple[str, str]:
+        """
+        Refresh the access token using the refresh token.
+        
+        5Paisa access tokens expire after a certain period.
+        This method uses the refresh token to get a new access token.
+        
+        Returns:
+            Tuple of (access_token, refresh_token)
+            
+        Raises:
+            ValueError: If token cannot be refreshed
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            client = self._get_client()
+            
+            # Try to refresh using the SDK
+            if hasattr(client, 'refresh_access_token') and self.access_token:
+                new_tokens = client.refresh_access_token(self.access_token)
+                if new_tokens:
+                    self.access_token = new_tokens.get('access_token', self.access_token)
+                    new_refresh = new_tokens.get('refresh_token')
+                    if new_refresh:
+                        self.refresh_token = new_refresh
+                    logger.info("5Paisa: Successfully refreshed access token")
+                    return self.access_token, new_refresh or self.refresh_token
+            
+            # If SDK doesn't have refresh method, try direct API call
+            logger.warning("5Paisa SDK doesn't support automatic refresh. Attempting manual refresh.")
+            
+            # 5Paisa refresh token endpoint
+            import json
+
+            import requests
+            
+            refresh_url = "https://dev-openapi.5paisa.com/V1/OAuth/RenewAccessToken"
+            payload = {
+                "Token": self.access_token,
+                "RefreshToken": self.refresh_token,
+                "UserKey": self.user_key
+            }
+            
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.access_token}"
+            }
+            
+            response = requests.post(refresh_url, json=payload, headers=headers, timeout=30)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('Status') == 0:
+                    self.access_token = data.get('AccessToken', self.access_token)
+                    new_refresh = data.get('RefreshToken')
+                    if new_refresh:
+                        self.refresh_token = new_refresh
+                    logger.info("5Paisa: Successfully refreshed access token via API")
+                    return self.access_token, self.refresh_token
+                else:
+                    error_msg = data.get('Message', 'Unknown error')
+                    raise ValueError(f"Token refresh failed: {error_msg}")
+            else:
+                raise ValueError(f"Token refresh API returned status {response.status_code}")
+                
+        except ImportError:
+            logger.error("5Paisa: Cannot refresh - requests or py5paisa not available")
+            raise ValueError("5Paisa refresh requires py5paisa and requests packages")
+        except Exception as e:
+            logger.error(f"5Paisa: Failed to refresh token: {e}")
+            raise ValueError(f"Failed to refresh 5Paisa token: {str(e)}")
+
+    def is_token_valid(self) -> bool:
+        """
+        Check if the current access token is still valid.
+        
+        Returns:
+            True if token is valid, False otherwise
+        """
+        try:
+            client = self._get_client()
+            # Try to make a simple API call to validate the token
+            if hasattr(client, 'holdings'):
+                # This will fail with 401 if token is invalid
+                result = client.holdings()
+                # 5Paisa returns None on auth failure
+                return result is not None
+            return True
+        except Exception:
+            return False
 
 
 # Keep the old class name for backwards compatibility
