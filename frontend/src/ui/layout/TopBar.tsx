@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { LogOut, Moon, Search, Sun } from 'lucide-react'
 
 import { api } from '../../lib/api'
@@ -12,15 +12,30 @@ export function TopBar() {
   const { user, logout } = useAuth()
   const { mode, toggle } = useTheme()
   const navigate = useNavigate()
+  const location = useLocation()
   const { selectedPortfolioId, setSelectedPortfolioId } = useAppStore()
+
+  const handlePortfolioChange = (portfolioId: number | null) => {
+    setSelectedPortfolioId(portfolioId)
+
+    // If on Trading Journal page, navigate to new portfolio's journal
+    if (location.pathname.startsWith('/app/journal') && portfolioId) {
+      navigate(`/app/journal/${portfolioId}`)
+    }
+  }
 
   const portfoliosQuery = useQuery({
     queryKey: ['portfolios'],
     queryFn: async () => {
-      const { data } = await api.get<Portfolio[]>('/portfolio/')
+      const { data } = await api.get<Portfolio[]>('/portfolios')
       return data
     },
   })
+
+  // Show current URL portfolio ID if on journal page, otherwise show selected from store
+  const displayedPortfolioId = location.pathname.startsWith('/app/journal')
+    ? (location.pathname.split('/')[3] ? Number(location.pathname.split('/')[3]) : selectedPortfolioId)
+    : selectedPortfolioId
 
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-surface/80 backdrop-blur-xl shadow-lg">
@@ -35,20 +50,23 @@ export function TopBar() {
         </div>
 
         <div className="flex items-center gap-3">
-          <select
-            className="hidden rounded-xl border border-border bg-bg px-4 py-2.5 text-sm font-medium text-text transition-all hover:border-indigo-500/50 focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 sm:block"
-            value={selectedPortfolioId ?? ''}
-            onChange={(e) => setSelectedPortfolioId(e.target.value ? Number(e.target.value) : null)}
-            title="Selected portfolio (used for broker sync)"
-            disabled={portfoliosQuery.isLoading || portfoliosQuery.isError}
-          >
-            <option value="">All portfolios</option>
-            {(portfoliosQuery.data ?? []).map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+          {/* Only show portfolio selector when NOT on Holdings page */}
+          {location.pathname !== '/app/holdings' && (
+            <select
+              className="hidden rounded-xl border border-border bg-bg px-4 py-2.5 text-sm font-medium text-text transition-all hover:border-indigo-500/50 focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 sm:block"
+              value={displayedPortfolioId ?? ''}
+              onChange={(e) => handlePortfolioChange(e.target.value ? Number(e.target.value) : null)}
+              title="Selected portfolio (used for trading journal)"
+              disabled={portfoliosQuery.isLoading || portfoliosQuery.isError}
+            >
+              <option value="">All portfolios</option>
+              {(portfoliosQuery.data ?? []).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          )}
 
           <button
             type="button"

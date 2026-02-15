@@ -1,12 +1,16 @@
 import { NavLink } from 'react-router-dom'
-import { BarChart3, Briefcase, CreditCard, FileText, LayoutDashboard, Link2, Settings, TrendingUp } from 'lucide-react'
+import { BarChart3, Briefcase, BookOpen, CreditCard, FileText, LayoutDashboard, Link2, Settings, TrendingUp } from 'lucide-react'
 
 import { cn } from '../../lib/cn'
+import { useAppStore } from '../../store/appStore'
 
-const nav = [
+const staticNav = [
   { to: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/app/holdings', label: 'Holdings', icon: Briefcase },
   { to: '/app/transactions', label: 'Transactions', icon: CreditCard },
+]
+
+const analysisNav = [
   { to: '/app/analysis', label: 'Analysis', icon: TrendingUp },
   { to: '/app/tax-reports', label: 'Tax Reports', icon: FileText },
   { to: '/app/brokers', label: 'Brokers', icon: Link2 },
@@ -14,6 +18,7 @@ const nav = [
 ]
 
 export function Sidebar() {
+  const { selectedPortfolioId } = useAppStore()
   return (
     <aside className="border-border bg-surface md:sticky md:top-0 md:h-screen md:border-r">
       <div className="flex items-center gap-3 border-b border-border px-6 py-7 bg-gradient-to-r from-indigo-950/10 via-purple-950/5 to-transparent dark:from-indigo-950/30 dark:via-purple-950/20 dark:to-zinc-900/30">
@@ -22,13 +27,49 @@ export function Sidebar() {
           <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-lg font-extrabold tracking-tight bg-gradient-to-r from-indigo-400 via-purple-300 to-indigo-500 bg-clip-text text-transparent">Quatleap</div>
+          <div className="truncate text-lg font-extrabold tracking-tight bg-gradient-to-r from-indigo-400 via-purple-300 to-indigo-500 bg-clip-text text-transparent">Quantleap</div>
           <div className="truncate text-xs text-muted font-medium">Portfolio Tracker</div>
         </div>
       </div>
 
       <nav className="space-y-2 px-4 py-6">
-        {nav.map(({ to, label, icon: Icon }) => (
+        {staticNav.map(({ to, label, icon: Icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            className={({ isActive }) =>
+              cn(
+                'flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition-all duration-200 group',
+                isActive
+                  ? 'bg-gradient-to-r from-indigo-600/50 via-purple-600/40 to-indigo-600/50 text-white shadow-lg shadow-indigo-500/20 border border-indigo-500/50'
+                  : 'text-muted hover:text-text hover:bg-border/30 border border-transparent hover:border-border',
+              )
+            }
+            end
+          >
+            <Icon className="h-4 w-4 flex-shrink-0 transition-transform group-hover:scale-110" />
+            <span className="flex-1">{label}</span>
+          </NavLink>
+        ))}
+
+        {/* Trading Journal link */}
+        <NavLink
+          to={selectedPortfolioId ? `/app/journal/${selectedPortfolioId}` : '/app/journal'}
+          className={({ isActive }) =>
+            cn(
+              'flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition-all duration-200 group',
+              isActive
+                ? 'bg-gradient-to-r from-indigo-600/50 via-purple-600/40 to-indigo-600/50 text-white shadow-lg shadow-indigo-500/20 border border-indigo-500/50'
+                : 'text-muted hover:text-text hover:bg-border/30 border border-transparent hover:border-border',
+            )
+          }
+          title={selectedPortfolioId ? 'View trading journal' : 'Select a portfolio first in Holdings'}
+        >
+          <BookOpen className="h-4 w-4 flex-shrink-0 transition-transform group-hover:scale-110" />
+          <span className="flex-1">Trading Journal</span>
+        </NavLink>
+
+        {analysisNav.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}

@@ -40,7 +40,7 @@ export function RegisterPage() {
               <BarChart3 className="h-7 w-7" />
             </div>
             <div>
-              <div className="text-2xl font-black tracking-tight bg-gradient-to-r from-indigo-300 to-purple-300 bg-clip-text text-transparent">Quatleap</div>
+              <div className="text-2xl font-black tracking-tight bg-gradient-to-r from-indigo-300 to-purple-300 bg-clip-text text-transparent">Quantleap</div>
               <div className="text-sm text-indigo-400/70">Create Your Account</div>
             </div>
           </div>

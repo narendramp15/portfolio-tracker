@@ -73,7 +73,7 @@ export function LoginPage() {
               <BarChart3 className="h-7 w-7" />
             </div>
             <div>
-              <div className="text-2xl font-black tracking-tight bg-gradient-to-r from-blue-300 to-cyan-300 bg-clip-text text-transparent">Quatleap</div>
+              <div className="text-2xl font-black tracking-tight bg-gradient-to-r from-blue-300 to-cyan-300 bg-clip-text text-transparent">Quantleap</div>
               <div className="text-sm text-blue-400/70">Portfolio Tracker</div>
             </div>
           </div>

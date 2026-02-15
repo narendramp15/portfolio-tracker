@@ -302,3 +302,54 @@ class BrokerTransactionsSyncResponse(BaseModel):
     message: str
     transactions_count: int = 0
     transactions_imported: int = 0
+  
+# Trading Journal Schemas  
+class TradingJournalBase(BaseModel):  
+    """Base trading journal schema."""  
+  
+    symbol: str = Field(..., min_length=1, max_length=20, description="Stock symbol (e.g., RELIANCE.NS)")  
+    entry_price: Decimal = Field(..., gt=0, description="Price at which the trade was entered")  
+    exit_price: Optional[Decimal] = Field(None, gt=0, description="Price at which the trade was exited")  
+    quantity: Decimal = Field(..., gt=0, description="Number of shares traded")  
+    entry_date: datetime = Field(..., description="Date and time when the trade was entered")  
+    exit_date: Optional[datetime] = Field(None, description="Date and time when the trade was exited")  
+    notes: Optional[str] = Field(None, description="Additional notes about the trade")  
+  
+class TradingJournalCreate(TradingJournalBase):  
+    """Schema for creating a trading journal entry."""  
+  
+    pass  
+  
+class TradingJournalUpdate(BaseModel):  
+    """Schema for updating a trading journal entry."""  
+  
+    exit_price: Optional[Decimal] = Field(None, gt=0, description="Price at which the trade was exited")  
+    exit_date: Optional[datetime] = Field(None, description="Date and time when the trade was exited")  
+    notes: Optional[str] = Field(None, description="Additional notes about the trade")  
+  
+class TradingJournal(TradingJournalBase):  
+    """Trading journal schema with database fields."""  
+  
+    id: int  
+    portfolio_id: int  
+    trade_id: int  
+    profit_loss: Optional[Decimal] = None  
+    created_at: datetime  
+    updated_at: datetime  
+  
+    class Config:  
+        """Pydantic config."""  
+  
+        from_attributes = True  
+  
+class TradingJournalSummary(BaseModel):  
+    """Schema for trading journal summary statistics."""  
+  
+    total_trades: int = Field(..., description="Total number of trades")  
+    winning_trades: int = Field(..., description="Number of winning trades")  
+    losing_trades: int = Field(..., description="Number of losing trades")  
+    win_rate: float = Field(..., description="Win rate as a percentage")  
+    total_profit_loss: Decimal = Field(..., description="Total profit/loss from all trades")  
+    average_profit_loss: Decimal = Field(..., description="Average profit/loss per trade")  
+    best_trade: Optional[Decimal] = Field(None, description="Best single trade profit")  
+    worst_trade: Optional[Decimal] = Field(None, description="Worst single trade loss") 

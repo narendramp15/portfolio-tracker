@@ -1,4 +1,4 @@
-"""FastAPI application entry point."""
+﻿"""FastAPI application entry point."""
 
 import logging
 import os
@@ -16,7 +16,8 @@ from portfolio_tracker.config import settings
 from portfolio_tracker.database import create_tables
 from portfolio_tracker.routers import (analysis, auth, broker,
                                        broker_token_refresh, dashboard, market,
-                                       portfolio, tax_reports, transactions)
+                                       portfolio, tax_reports, trading_journal,
+                                       transactions)
 
 # Configure logging
 logging.basicConfig(
@@ -29,9 +30,9 @@ logger = logging.getLogger(__name__)
 create_tables()
 
 # Log CORS configuration on startup (helps debug production issues)
-logger.info(f"✓ CORS Origins configured: {settings.CORS_ORIGINS}")
-logger.info(f"✓ Frontend URL: {settings.FRONTEND_URL}")
-logger.info(f"✓ Google OAuth: {'Configured' if settings.GOOGLE_CLIENT_ID else 'Not configured'}")
+logger.info(f"âœ“ CORS Origins configured: {settings.CORS_ORIGINS}")
+logger.info(f"âœ“ Frontend URL: {settings.FRONTEND_URL}")
+logger.info(f"âœ“ Google OAuth: {'Configured' if settings.GOOGLE_CLIENT_ID else 'Not configured'}")
 
 
 # Raw ASGI middleware to handle OPTIONS BEFORE anything else
@@ -259,6 +260,9 @@ async def debug_config():
         "google_oauth_configured": bool(settings.GOOGLE_CLIENT_ID),
         "google_redirect_uri": settings.GOOGLE_REDIRECT_URI,
     }
+
+
+_app.include_router(trading_journal.router, prefix="/api/journal", tags=["journal"])
 
 
 if __name__ == "__main__":

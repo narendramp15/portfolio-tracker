@@ -344,3 +344,30 @@ class Portfolio:
         if cost_basis == 0:
             return Decimal("0")
         return (self.get_total_gain_loss() / cost_basis) * Decimal("100")
+  
+class TradingJournalModel(Base):  
+    """SQLAlchemy model for Trading Journal."""  
+  
+    __tablename__ = "trading_journal"  
+  
+    id = Column(Integer, primary_key=True, index=True)  
+    portfolio_id = Column(Integer, ForeignKey("portfolios.id"), nullable=False, index=True)  
+    trade_id = Column(Integer, nullable=False)  
+    symbol = Column(String(20), nullable=False, index=True)  
+    entry_price = Column(Numeric(20, 8), nullable=False)  
+    exit_price = Column(Numeric(20, 8), nullable=True)  
+    quantity = Column(Numeric(20, 8), nullable=False)  
+    entry_date = Column(DateTime(timezone=True), nullable=False)  
+    exit_date = Column(DateTime(timezone=True), nullable=True)  
+    profit_loss = Column(Numeric(20, 2), nullable=True)  
+    notes = Column(Text, nullable=True)  
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)  
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)  
+  
+    # Relationship  
+    portfolio = relationship("PortfolioModel")  
+  
+    # Composite unique constraint  
+    __table_args__ = (  
+        UniqueConstraint('portfolio_id', 'trade_id', name='uix_portfolio_trade'),  
+    ) 

@@ -15,6 +15,7 @@ import TechnicalAnalysisPage from '../ui/pages/TechnicalAnalysisPage'
 import TaxReportsPage from '../ui/pages/TaxReportsPage'
 import { TransactionsPage } from '../ui/pages/TransactionsPage'
 import { AuthCallbackPage } from '../ui/pages/AuthCallbackPage'
+import { TradingJournalPage } from '../ui/pages/TradingJournalPage'
 
 export const router = createBrowserRouter([
   { path: '/', element: <LandingPage /> },
@@ -35,6 +36,8 @@ export const router = createBrowserRouter([
       { path: 'dashboard', element: <DashboardPage /> },
       { path: 'holdings', element: <HoldingsPage /> },
       { path: 'transactions', element: <TransactionsPage /> },
+      { path: 'journal', element: <TradingJournalPage /> },
+      { path: 'journal/:portfolioId', element: <TradingJournalPage /> },
       { path: 'analysis', element: <TechnicalAnalysisPage /> },
       { path: 'tax-reports', element: <TaxReportsPage /> },
       { path: 'brokers', element: <BrokersPage /> },

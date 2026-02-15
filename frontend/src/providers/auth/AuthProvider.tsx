@@ -1,8 +1,9 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { type PropsWithChildren } from 'react'
 
 import { api } from '../../lib/api'
 import { type TokenResponse, type User } from '../../types/domain'
+import { useAppStore } from '../../store/appStore'
 
 type AuthContextValue = {
   token: string | null
@@ -28,13 +29,53 @@ function loadUserFromStorage(): User | null {
 export function AuthProvider({ children }: PropsWithChildren) {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('access_token'))
   const [user, setUser] = useState<User | null>(() => loadUserFromStorage())
+  const { selectedPortfolioId, setSelectedPortfolioId } = useAppStore()
 
   const logout = useCallback(() => {
     localStorage.removeItem('access_token')
     localStorage.removeItem('user')
     setToken(null)
     setUser(null)
-  }, [])
+    // Clear selected portfolio on logout
+    setSelectedPortfolioId(null)
+  }, [setSelectedPortfolioId])
+
+  // Validate portfolio ownership only when user changes (login/logout), not on every selection
+  useEffect(() => {
+    if (!user) {
+      // Clear selection when logging out
+      if (selectedPortfolioId) {
+        setSelectedPortfolioId(null)
+      }
+      return
+    }
+
+    // Only validate if there's a selected portfolio from previous session
+    if (!selectedPortfolioId) return
+
+    const validatePortfolio = async () => {
+      try {
+        // Try to fetch portfolios to verify access
+        const response = await api.get('/portfolios')
+        const portfolios = response.data as Array<{ id: number }>
+
+        // Check if the selected portfolio belongs to current user
+        const hasAccess = portfolios.some(p => p.id === selectedPortfolioId)
+
+        if (!hasAccess) {
+          console.warn(`Selected portfolio ${selectedPortfolioId} does not belong to current user. Clearing selection.`)
+          setSelectedPortfolioId(null)
+        }
+      } catch (error) {
+        console.error('Failed to validate portfolio ownership:', error)
+        // Don't clear on error - could be temporary network issue
+      }
+    }
+
+    validatePortfolio()
+    // Only run on user change to avoid clearing selection during normal usage
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
 
   const applyTokenResponse = useCallback((data: TokenResponse) => {
     localStorage.setItem('access_token', data.access_token)

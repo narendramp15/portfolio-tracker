@@ -72,3 +72,53 @@ export type TransactionRow = {
   notes?: string | null
   transaction_date: string
 }
+
+export type TradingJournalEntry = {
+  id: number
+  portfolio_id: number
+  trade_id: number
+  symbol: string
+  entry_price: number | string
+  exit_price: number | string | null
+  quantity: number | string
+  entry_date: string
+  exit_date: string | null
+  profit_loss: number | string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type TradingJournalSummary = {
+  total_trades: number
+  winning_trades: number
+  losing_trades: number
+  win_rate: number
+  total_profit_loss: number | string
+  average_profit_loss: number | string
+  best_trade: number | string | null
+  worst_trade: number | string | null
+}
+
+export type TradingJournalCreate = {
+  symbol: string
+  entry_price: number | string
+  exit_price?: number | string | null
+  quantity: number | string
+  entry_date: string
+  exit_date?: string | null
+  notes?: string | null
+}
+
+export type TradingJournalUpdate = {
+  exit_price?: number | string | null
+  exit_date?: string | null
+  notes?: string | null
+}
+
+export type TradingJournalFormData = TradingJournalCreate | Omit<TradingJournalUpdate, 'exit_price' | 'exit_date'> & {
+  symbol?: string
+  entry_price?: number | string
+  quantity?: number | string
+  entry_date?: string
+}

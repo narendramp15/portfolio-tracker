@@ -53,6 +53,30 @@ These items are derived from reviewing the current FastAPI + React implementatio
 
 ## Phase 1: Core Enhancement (Weeks 1-4)
 
+### 0. Trading Journal Feature ✅ NEW
+- [x] **Trading Journal Database Table**
+  - Columns: portfolio_id, trade_id, symbol, entry_price, exit_price, quantity, entry_date, exit_date, profit_loss, notes, created_at, updated_at
+  - Migration: migrations/006_create_trading_journal_table.sql
+- [x] **Trading Journal API Endpoints**
+  - POST /api/journal/{portfolio_id} - Create trade entry
+  - GET /api/journal/{portfolio_id} - List all entries
+  - GET /api/journal/{portfolio_id}/stats - Get statistics
+  - GET /api/journal/{portfolio_id}/{journal_id} - Get specific entry
+  - PATCH /api/journal/{portfolio_id}/{journal_id} - Update entry
+  - DELETE /api/journal/{portfolio_id}/{journal_id} - Delete entry
+- [x] **Trading Journal Frontend**
+  - TradingJournalPage - Main journal view with stats
+  - TradingJournalForm - Create/edit trade form
+  - Sidebar navigation to journal
+- [x] **Comprehensive Testing**
+  - Backend unit tests (test_trading_journal.py)
+  - Integration tests (test_trading_journal_integration.py)
+  - E2E tests (test_trading_journal_e2e.py)
+- [x] **Documentation**
+  - API documentation (docs/TRADING_JOURNAL_API.md)
+  - Performance tests (docs/TRADING_JOURNAL_PERFORMANCE.md)
+  - Security tests (docs/TRADING_JOURNAL_SECURITY.md)
+
 ### 1. Enhanced Portfolio Analytics
 - [ ] **Asset Allocation Visualizations**
   - Sector-wise breakdown (IT, Pharma, Banking, FMCG, Auto, etc.)
