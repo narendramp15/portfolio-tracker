@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { FileText, TrendingUp, Calculator, Download, AlertCircle, Info } from 'lucide-react'
 import { api } from '../../lib/api'
 import { useAppStore } from '../../store/appStore'
-import { formatCurrencyINR, formatPercent } from '../../lib/format'
+import { formatCurrencyINR } from '../../lib/format'
 
 interface SymbolGain {
     symbol: string

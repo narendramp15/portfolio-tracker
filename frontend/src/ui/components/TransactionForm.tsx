@@ -45,7 +45,6 @@ export function TransactionForm({ portfolios, initialPortfolio, onClose }: Trans
     const [quantityError, setQuantityError] = useState<string | null>(null)
 
     const selectedPortfolio = portfolios.find(p => p.id.toString() === selectedPortfolioId)
-    const selectedAsset = selectedPortfolio?.assets.find(a => a.id.toString() === formData.asset_id)
 
     // Query for available quantity when selling
     const availableQtyQuery = useQuery({
