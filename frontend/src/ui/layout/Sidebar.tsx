@@ -22,7 +22,7 @@ export function Sidebar() {
           <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-lg font-extrabold tracking-tight bg-gradient-to-r from-indigo-400 via-purple-300 to-indigo-500 bg-clip-text text-transparent">Quatleap</div>
+          <div className="truncate text-lg font-extrabold tracking-tight bg-gradient-to-r from-indigo-400 via-purple-300 to-indigo-500 bg-clip-text text-transparent">Quantleap</div>
           <div className="truncate text-xs text-muted font-medium">Portfolio Tracker</div>
         </div>
       </div>

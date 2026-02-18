@@ -8,7 +8,7 @@ export function Footer() {
                     <div className="flex items-center gap-2 text-sm text-muted">
                         <span>© {currentYear}</span>
                         <span className="font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-                            Quatleap
+                            Quantleap
                         </span>
                         <span>• All rights reserved</span>
                     </div>

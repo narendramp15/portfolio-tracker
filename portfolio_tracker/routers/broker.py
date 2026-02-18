@@ -699,25 +699,40 @@ def sync_angel_holdings(
 # 5Paisa Broker Endpoints
 @router.post("/fivepaisa/setup")
 def setup_fivepaisa_broker(
-    user_key: str = Query(..., description="5Paisa User Key (VendorKey)"),
-    encryption_key: str = Query(..., description="5Paisa Encryption Key"),
-    app_name: str = Query(..., description="5Paisa App Name"),
-    app_source: str = Query(..., description="5Paisa App Source"),
-    user_id_5p: str = Query(..., description="5Paisa User ID"),
-    password: str = Query(..., description="5Paisa Password"),
+    user_key: Optional[str] = Query(None, description="5Paisa User Key (VendorKey)"),
+    encryption_key: Optional[str] = Query(None, description="5Paisa Encryption Key"),
+    api_key: Optional[str] = Query(None, description="Legacy alias for user_key"),
+    api_secret: Optional[str] = Query(None, description="Legacy alias for encryption_key"),
+    app_name: Optional[str] = Query(None, description="5Paisa App Name"),
+    app_source: Optional[str] = Query(None, description="5Paisa App Source"),
+    user_id_5p: Optional[str] = Query(None, description="5Paisa User ID"),
+    password: Optional[str] = Query(None, description="5Paisa Password"),
     consent_given: bool = Query(False),
     token: Optional[str] = Query(default=None),
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Setup 5Paisa broker with all required credentials."""
+    """Setup 5Paisa broker with all required credentials.
+
+    Backwards-compatible: accepts legacy `api_key`/`api_secret` (aliases for
+    `user_key` / `encryption_key`) and makes the extra fields optional so tests
+    that only supply `api_key`/`api_secret` continue to work.
+    """
     import json
-    
+
+    # Support legacy param names and provide sensible defaults for optional fields
+    effective_user_key = user_key or api_key
+    effective_encryption_key = encryption_key or api_secret
+    app_name = app_name or ""
+    app_source = app_source or ""
+    user_id_5p = user_id_5p or ""
+    password = password or ""
+
     try:
         from portfolio_tracker.brokers.fivepaisa import FivePaisaBroker
-        
+
         db_user_id = user.id
-        
+
         # Store extra config as encrypted JSON
         extra_config = {
             "app_name": app_name,
@@ -726,27 +741,27 @@ def setup_fivepaisa_broker(
             "password": password,
         }
         encrypted_extra = EncryptionManager.encrypt(json.dumps(extra_config))
-        
+
         # Test creating the broker (validates credentials format)
         broker = FivePaisaBroker(
-            api_key=user_key,
-            api_secret=encryption_key,
+            api_key=effective_user_key,
+            api_secret=effective_encryption_key,
             app_name=app_name,
             app_source=app_source,
             user_id=user_id_5p,
             password=password,
         )
         profile = broker.get_profile()
-        
+
         # Save broker config with encrypted credentials
         config = crud.get_broker_config_by_broker_name(db, db_user_id, "fivepaisa")
-        
+
         if config:
             config = crud.update_broker_config(
                 db,
                 config.id,
-                api_key=EncryptionManager.encrypt(user_key),
-                api_secret=EncryptionManager.encrypt(encryption_key),
+                api_key=EncryptionManager.encrypt(effective_user_key or ""),
+                api_secret=EncryptionManager.encrypt(effective_encryption_key or ""),
                 extra_config=encrypted_extra,
                 broker_user_id=profile.get("user_id", user_id_5p),
                 consent_given=consent_given,
@@ -757,20 +772,17 @@ def setup_fivepaisa_broker(
                 user_id=db_user_id,
                 broker_name="fivepaisa",
                 broker_user_id=profile.get("user_id", user_id_5p),
-                api_key=EncryptionManager.encrypt(user_key),
-                api_secret=EncryptionManager.encrypt(encryption_key),
+                api_key=EncryptionManager.encrypt(effective_user_key or ""),
+                api_secret=EncryptionManager.encrypt(effective_encryption_key or ""),
                 extra_config=encrypted_extra,
                 consent_given=consent_given,
             )
-        
-        return {
-            "success": True,
-            "message": "5Paisa broker connected successfully"
-        }
+
+        return {"success": True, "message": "5Paisa broker connected successfully"}
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to setup 5Paisa: {str(e)}"
+            detail=f"Failed to setup 5Paisa: {str(e)}",
         )
 
 

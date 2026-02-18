@@ -222,17 +222,25 @@ print(f"Total Portfolio Value: ${stats['total_portfolio_value']}")
 
 ## Testing
 
-Run tests with pytest:
+Backend (Python) — run with pytest:
 ```bash
-# Run all tests
+# Run all backend tests
 uv run pytest
 
 # Run with coverage
 uv run pytest --cov=portfolio_tracker
 
-# Run specific test file
+# Run a specific test file
 uv run pytest tests/test_models.py -v
 ```
+
+Frontend (React) — Vitest (unit tests):
+```bash
+cd frontend
+npm install
+npm test        # runs Vitest in jsdom environment
+```
+
 
 ## Code Quality
 
