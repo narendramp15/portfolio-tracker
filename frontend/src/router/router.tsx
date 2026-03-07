@@ -16,6 +16,8 @@ import TechnicalAnalysisPage from '../ui/pages/TechnicalAnalysisPage'
 import TaxReportsPage from '../ui/pages/TaxReportsPage'
 import { TransactionsPage } from '../ui/pages/TransactionsPage'
 import { AuthCallbackPage } from '../ui/pages/AuthCallbackPage'
+import NiftyOptionsAnalyzerPage from '../ui/pages/NiftyOptionsAnalyzerPage'
+import { BillingPage } from '../ui/pages/BillingPage'
 
 export const router = createBrowserRouter([
   { path: '/', element: <LandingPage /> },
@@ -25,6 +27,7 @@ export const router = createBrowserRouter([
   { path: '/register', element: <RegisterPage /> },
   { path: '/reset-password', element: <ResetPasswordPage /> },
   { path: '/auth/callback', element: <AuthCallbackPage /> },
+  { path: '/options-analyzer', element: <NiftyOptionsAnalyzerPage /> },
   {
     path: '/app',
     element: (
@@ -41,6 +44,8 @@ export const router = createBrowserRouter([
       { path: 'tax-reports', element: <TaxReportsPage /> },
       { path: 'brokers', element: <BrokersPage /> },
       { path: 'settings', element: <SettingsPage /> },
+      { path: 'billing', element: <BillingPage /> },
+      { path: 'options-analyzer', element: <NiftyOptionsAnalyzerPage /> },
     ],
   },
   { path: '*', element: <NotFoundPage /> },

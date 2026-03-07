@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router-dom'
-import { BarChart3, Briefcase, CreditCard, FileText, LayoutDashboard, Link2, Settings, TrendingUp } from 'lucide-react'
+import { BarChart3, Briefcase, CreditCard, Crown, FileText, LayoutDashboard, Link2, Settings, TrendingUp, Zap } from 'lucide-react'
 
 import { cn } from '../../lib/cn'
+import { useSubscription } from '../../hooks/useSubscription'
 
-const nav = [
+const baseNav = [
   { to: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/app/holdings', label: 'Holdings', icon: Briefcase },
   { to: '/app/transactions', label: 'Transactions', icon: CreditCard },
@@ -11,9 +12,13 @@ const nav = [
   { to: '/app/tax-reports', label: 'Tax Reports', icon: FileText },
   { to: '/app/brokers', label: 'Brokers', icon: Link2 },
   { to: '/app/settings', label: 'Settings', icon: Settings },
+  { to: '/app/options-analyzer', label: 'Options Analyzer', icon: Zap },
 ]
 
 export function Sidebar() {
+  const { isPro } = useSubscription()
+  const nav = [...baseNav]
+
   return (
     <aside className="border-border bg-surface md:sticky md:top-0 md:h-screen md:border-r">
       <div className="flex items-center gap-3 border-b border-border px-6 py-7 bg-gradient-to-r from-indigo-950/10 via-purple-950/5 to-transparent dark:from-indigo-950/30 dark:via-purple-950/20 dark:to-zinc-900/30">
@@ -46,6 +51,35 @@ export function Sidebar() {
             <span className="flex-1">{label}</span>
           </NavLink>
         ))}
+
+        {/* Billing / Upgrade link */}
+        <NavLink
+          to="/app/billing"
+          className={({ isActive }) =>
+            cn(
+              'flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition-all duration-200 group',
+              isActive
+                ? 'bg-gradient-to-r from-indigo-600/50 via-purple-600/40 to-indigo-600/50 text-white shadow-lg shadow-indigo-500/20 border border-indigo-500/50'
+                : isPro
+                  ? 'text-muted hover:text-text hover:bg-border/30 border border-transparent hover:border-border'
+                  : 'text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 border border-transparent hover:border-indigo-500/30',
+            )
+          }
+          end
+        >
+          <Crown className="h-4 w-4 flex-shrink-0 transition-transform group-hover:scale-110" />
+          <span className="flex-1">Billing</span>
+          {!isPro && (
+            <span className="rounded-full bg-indigo-500/20 px-2 py-0.5 text-[10px] font-bold text-indigo-300 border border-indigo-500/30">
+              Upgrade
+            </span>
+          )}
+          {isPro && (
+            <span className="rounded-full bg-green-500/20 px-2 py-0.5 text-[10px] font-bold text-green-300 border border-green-500/30">
+              Pro
+            </span>
+          )}
+        </NavLink>
       </nav>
     </aside>
   )

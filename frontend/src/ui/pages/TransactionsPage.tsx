@@ -7,6 +7,7 @@ import { formatCurrencyINR } from '../../lib/format.ts'
 import { type TransactionRow, type Portfolio } from '../../types/domain'
 import { Card } from '../components/Card'
 import { TransactionForm } from '../components/TransactionForm'
+import { UpgradeModal } from '../components/UpgradeModal'
 
 async function fetchTransactions() {
   const { data } = await api.get<TransactionRow[]>('/transactions/')
@@ -24,6 +25,8 @@ export function TransactionsPage() {
   const [type, setType] = useState<string>('all')
   const [q, setQ] = useState('')
   const [isTransactionOpen, setIsTransactionOpen] = useState(false)
+  const [showUpgrade, setShowUpgrade] = useState(false)
+  const [upgradeReason, setUpgradeReason] = useState('')
 
   const rows = useMemo(() => {
     const list = query.data ?? []
@@ -52,7 +55,12 @@ export function TransactionsPage() {
       link.click()
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.response?.status === 402) {
+        setUpgradeReason(error.response.data?.detail || 'Upgrade to Pro for unlimited CSV exports.')
+        setShowUpgrade(true)
+        return
+      }
       console.error('Export failed:', error)
       alert('Failed to export CSV')
     }
@@ -183,6 +191,11 @@ export function TransactionsPage() {
           onClose={() => setIsTransactionOpen(false)}
         />
       )}
+      <UpgradeModal
+        open={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        reason={upgradeReason}
+      />
     </div>
   )
 }

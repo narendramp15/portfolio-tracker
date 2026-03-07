@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 
 from portfolio_tracker import models, schemas
 from portfolio_tracker.database import get_db
-from portfolio_tracker.deps import get_current_user
+from portfolio_tracker.deps import (check_export_limit, get_current_user,
+                                    log_export)
 from portfolio_tracker.models import UserModel
 
 router = APIRouter()
@@ -85,6 +86,9 @@ async def export_all_transactions_csv(
     user: UserModel = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     """Export all transactions across all portfolios to CSV."""
+    # Enforce monthly export quota for free-tier users
+    check_export_limit(user, db)
+
     transactions = (
         db.query(models.TransactionModel)
         .join(models.PortfolioModel, models.TransactionModel.portfolio_id == models.PortfolioModel.id)
@@ -129,7 +133,10 @@ async def export_all_transactions_csv(
         ])
     
     output.seek(0)
-    
+
+    # Record export for rate-limiting
+    log_export(user, "transactions", db)
+
     return StreamingResponse(
         iter([output.getvalue()]),
         media_type="text/csv",

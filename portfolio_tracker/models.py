@@ -32,9 +32,17 @@ class UserModel(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
+    # Subscription fields
+    subscription_tier = Column(String(20), default="free", nullable=False, server_default="free")
+    subscription_status = Column(String(20), default="active", nullable=False, server_default="active")
+    subscription_expires_at = Column(DateTime, nullable=True)
+    razorpay_subscription_id = Column(String(255), nullable=True)
+    razorpay_customer_id = Column(String(255), nullable=True)
+
     # Relationships
     portfolios = relationship("PortfolioModel", back_populates="owner", cascade="all, delete-orphan")
     password_reset_tokens = relationship("PasswordResetTokenModel", back_populates="user", cascade="all, delete-orphan")
+    export_logs = relationship("ExportLogModel", back_populates="user", cascade="all, delete-orphan")
 
 
 class PasswordResetTokenModel(Base):
@@ -191,6 +199,23 @@ class PriceHistoryModel(Base):
     __table_args__ = (
         UniqueConstraint('symbol', 'date', name='uix_symbol_date'),
         Index('ix_price_history_symbol_date', 'symbol', 'date'),
+    )
+
+
+class ExportLogModel(Base):
+    """Tracks CSV export usage per user for free-tier rate limiting."""
+
+    __tablename__ = "export_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    export_type = Column(String(50), nullable=False)  # 'transactions' | 'tax_report' | 'holdings'
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    user = relationship("UserModel", back_populates="export_logs")
+
+    __table_args__ = (
+        Index('ix_export_logs_user_month', 'user_id', 'created_at'),
     )
 
 

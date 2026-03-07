@@ -11,9 +11,10 @@ from sqlalchemy.orm import Session
 from portfolio_tracker import crud, schemas
 from portfolio_tracker.brokers.zerodha import ZerodhaBroker
 from portfolio_tracker.database import get_db
-from portfolio_tracker.deps import get_current_user
+from portfolio_tracker.deps import check_broker_limit, get_current_user
 from portfolio_tracker.encryption import EncryptionManager
-from portfolio_tracker.models import AssetModel, TransactionModel, UserModel
+from portfolio_tracker.models import (AssetModel, BrokerConfigModel,
+                                      TransactionModel, UserModel)
 from portfolio_tracker.services.symbol_mapper import symbol_mapper
 
 router = APIRouter()
@@ -50,6 +51,8 @@ def setup_zerodha_broker(
                 consent_given=consent_given,
             )
         else:
+            # Enforce plan broker limit only on NEW connections
+            check_broker_limit(user, db)
             config = crud.create_broker_config(
                 db,
                 user_id=user_id,
@@ -593,6 +596,7 @@ def setup_angel_broker(
                 consent_given=consent_given,
             )
         else:
+            check_broker_limit(user, db)
             config = crud.create_broker_config(
                 db,
                 user_id=user_id,
@@ -767,6 +771,7 @@ def setup_fivepaisa_broker(
                 consent_given=consent_given,
             )
         else:
+            check_broker_limit(user, db)
             config = crud.create_broker_config(
                 db,
                 user_id=db_user_id,
@@ -1011,3 +1016,321 @@ def sync_fivepaisa_holdings(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+
+
+# ── Dhan Broker Endpoints ─────────────────────────────────────────────────────
+
+@router.post("/dhan/setup")
+def setup_dhan_broker(
+    client_id: str = Query(..., description="Dhan Client ID from developer portal"),
+    access_token: str = Query(..., description="Dhan Access Token from developer portal"),
+    consent_given: bool = Query(False),
+    token: Optional[str] = Query(default=None),
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Setup Dhan broker with Client ID and Access Token (no OAuth redirect needed)."""
+    try:
+        from portfolio_tracker.brokers.dhan import DhanBroker
+
+        user_id = user.id
+        broker = DhanBroker(client_id=client_id, access_token=access_token)
+        profile = broker.get_profile()
+
+        config = crud.get_broker_config_by_broker_name(db, user_id, "dhan")
+        if config:
+            config = crud.update_broker_config(
+                db,
+                config.id,
+                api_key=EncryptionManager.encrypt(client_id),
+                access_token=EncryptionManager.encrypt(access_token),
+                broker_user_id=profile.get("user_id", client_id),
+                consent_given=consent_given,
+            )
+        else:
+            check_broker_limit(user, db)
+            config = crud.create_broker_config(
+                db,
+                user_id=user_id,
+                broker_name="dhan",
+                broker_user_id=profile.get("user_id", client_id),
+                api_key=EncryptionManager.encrypt(client_id),
+                access_token=EncryptionManager.encrypt(access_token),
+                consent_given=consent_given,
+            )
+
+        return {
+            "success": True,
+            "message": "Dhan broker connected successfully",
+            "config_id": config.id,
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to setup Dhan: {str(e)}",
+        )
+
+
+@router.post("/dhan/sync-holdings", response_model=schemas.BrokerSyncResponse)
+def sync_dhan_holdings(
+    portfolio_id: int = Query(...),
+    token: Optional[str] = Query(default=None),
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Sync holdings from Dhan to portfolio."""
+    try:
+        from portfolio_tracker.brokers.dhan import DhanBroker
+
+        user_id = user.id
+        config = crud.get_broker_config_by_broker_name(db, user_id, "dhan")
+        if not config or not config.access_token:
+            raise ValueError("Dhan not connected. Please connect Dhan from the Brokers page.")
+
+        portfolio = crud.get_portfolio_by_id(db, portfolio_id)
+        if not portfolio or portfolio.user_id != user_id:
+            raise ValueError("Portfolio not found")
+
+        client_id = EncryptionManager.decrypt(config.api_key or "")
+        access_token = EncryptionManager.decrypt(config.access_token)
+
+        broker = DhanBroker(client_id=client_id, access_token=access_token)
+        holdings = broker.get_holdings()
+
+        assets_imported = 0
+        for holding in holdings:
+            normalized_symbol = symbol_mapper.normalize_broker_symbol(
+                symbol=holding.symbol,
+                exchange="NSE",
+                isin=holding.isin,
+            )
+            company_name = symbol_mapper.get_company_name(normalized_symbol) or holding.symbol
+
+            asset = db.query(AssetModel).filter(
+                AssetModel.portfolio_id == portfolio_id,
+                AssetModel.symbol == normalized_symbol,
+            ).first()
+
+            if not asset:
+                asset = AssetModel(
+                    portfolio_id=portfolio_id,
+                    symbol=normalized_symbol,
+                    name=company_name,
+                    quantity=holding.quantity,
+                    current_price=holding.current_price,
+                    purchase_price=holding.average_price,
+                )
+                db.add(asset)
+                assets_imported += 1
+            else:
+                asset.name = company_name
+                asset.quantity = holding.quantity
+                asset.current_price = holding.current_price
+                asset.purchase_price = holding.average_price
+
+            db.commit()
+
+        crud.update_broker_config(db, config.id)
+
+        return schemas.BrokerSyncResponse(
+            success=True,
+            message=f"Successfully synced {len(holdings)} holdings",
+            holdings_count=len(holdings),
+            assets_imported=assets_imported,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+# ── Groww Broker Endpoints ────────────────────────────────────────────────────
+
+@router.post("/groww/setup")
+def setup_groww_broker(
+    api_key: str = Query(..., description="Groww Client ID / API Key"),
+    api_secret: str = Query(..., description="Groww Client Secret / API Secret"),
+    consent_given: bool = Query(False),
+    token: Optional[str] = Query(default=None),
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Save Groww API credentials and return OAuth login URL."""
+    try:
+        from portfolio_tracker.brokers.groww import GrowwBroker
+
+        user_id = user.id
+        broker = GrowwBroker(api_key=api_key, api_secret=api_secret)
+        login_url = broker.get_login_url()
+
+        config = crud.get_broker_config_by_broker_name(db, user_id, "groww")
+        if config:
+            config = crud.update_broker_config(
+                db,
+                config.id,
+                api_key=EncryptionManager.encrypt(api_key),
+                api_secret=EncryptionManager.encrypt(api_secret),
+                consent_given=consent_given,
+            )
+        else:
+            check_broker_limit(user, db)
+            config = crud.create_broker_config(
+                db,
+                user_id=user_id,
+                broker_name="groww",
+                broker_user_id="",
+                api_key=EncryptionManager.encrypt(api_key),
+                api_secret=EncryptionManager.encrypt(api_secret),
+                consent_given=consent_given,
+            )
+
+        return {
+            "success": True,
+            "login_url": login_url,
+            "message": "Groww credentials saved. Please complete OAuth authorization.",
+            "config_id": config.id,
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to setup Groww: {str(e)}",
+        )
+
+
+@router.get("/groww/login-url")
+def get_groww_login_url(
+    token: Optional[str] = Query(default=None),
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get Groww OAuth login URL from stored credentials."""
+    try:
+        from portfolio_tracker.brokers.groww import GrowwBroker
+
+        user_id = user.id
+        config = crud.get_broker_config_by_broker_name(db, user_id, "groww")
+        if not config or not config.api_key:
+            raise ValueError("Groww not configured. Please save API credentials first.")
+
+        api_key = EncryptionManager.decrypt(config.api_key)
+        api_secret = EncryptionManager.decrypt(config.api_secret or "")
+        broker = GrowwBroker(api_key=api_key, api_secret=api_secret)
+        return {"login_url": broker.get_login_url(), "broker": "groww"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/groww/callback")
+def groww_callback(
+    request_token: str = Query(..., description="Authorization code from Groww OAuth redirect"),
+    token: Optional[str] = Query(default=None),
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Complete Groww OAuth flow with the authorization code."""
+    try:
+        from portfolio_tracker.brokers.groww import GrowwBroker
+
+        user_id = user.id
+        config = crud.get_broker_config_by_broker_name(db, user_id, "groww")
+        if not config:
+            raise ValueError("Groww config not found. Please save API credentials first.")
+
+        api_key = EncryptionManager.decrypt(config.api_key or "")
+        api_secret = EncryptionManager.decrypt(config.api_secret or "")
+        broker = GrowwBroker(api_key=api_key, api_secret=api_secret)
+        access_token = broker.set_access_token(request_token)
+        profile = broker.get_profile()
+
+        crud.update_broker_config(
+            db,
+            config.id,
+            access_token=EncryptionManager.encrypt(access_token),
+            broker_user_id=profile.get("user_id", ""),
+        )
+
+        return {"success": True, "message": "Groww broker connected successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Groww OAuth failed: {str(e)}",
+        )
+
+
+@router.post("/groww/sync-holdings", response_model=schemas.BrokerSyncResponse)
+def sync_groww_holdings(
+    portfolio_id: int = Query(...),
+    token: Optional[str] = Query(default=None),
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Sync holdings from Groww to portfolio."""
+    try:
+        from portfolio_tracker.brokers.groww import GrowwBroker
+
+        user_id = user.id
+        config = crud.get_broker_config_by_broker_name(db, user_id, "groww")
+        if not config or not config.access_token:
+            raise ValueError("Groww not connected. Please authorize via the Brokers page.")
+
+        portfolio = crud.get_portfolio_by_id(db, portfolio_id)
+        if not portfolio or portfolio.user_id != user_id:
+            raise ValueError("Portfolio not found")
+
+        api_key = EncryptionManager.decrypt(config.api_key or "")
+        api_secret = EncryptionManager.decrypt(config.api_secret or "")
+        access_token = EncryptionManager.decrypt(config.access_token)
+
+        broker = GrowwBroker(api_key=api_key, api_secret=api_secret)
+        broker.set_token(access_token)
+        holdings = broker.get_holdings()
+
+        assets_imported = 0
+        for holding in holdings:
+            normalized_symbol = symbol_mapper.normalize_broker_symbol(
+                symbol=holding.symbol,
+                exchange="NSE",
+                isin=holding.isin,
+            )
+            company_name = symbol_mapper.get_company_name(normalized_symbol) or holding.symbol
+
+            asset = db.query(AssetModel).filter(
+                AssetModel.portfolio_id == portfolio_id,
+                AssetModel.symbol == normalized_symbol,
+            ).first()
+
+            if not asset:
+                asset = AssetModel(
+                    portfolio_id=portfolio_id,
+                    symbol=normalized_symbol,
+                    name=company_name,
+                    quantity=holding.quantity,
+                    current_price=holding.current_price,
+                    purchase_price=holding.average_price,
+                )
+                db.add(asset)
+                assets_imported += 1
+            else:
+                asset.name = company_name
+                asset.quantity = holding.quantity
+                asset.current_price = holding.current_price
+                asset.purchase_price = holding.average_price
+
+            db.commit()
+
+        crud.update_broker_config(db, config.id)
+
+        return schemas.BrokerSyncResponse(
+            success=True,
+            message=f"Successfully synced {len(holdings)} holdings",
+            holdings_count=len(holdings),
+            assets_imported=assets_imported,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

@@ -90,7 +90,8 @@ class Settings:
         pg_database = os.getenv("PGDATABASE")
         
         if all([pg_user, pg_password, pg_host, pg_database]):
-            return f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_database}"
+            ssl_mode = os.getenv("PGSSLMODE", "require")
+            return f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_database}?sslmode={ssl_mode}"
         
         # Fall back to DATABASE_URL or SQLite
         return os.getenv("DATABASE_URL", "sqlite:///./portfolio.db")
@@ -125,6 +126,17 @@ class Settings:
         """JWT algorithm."""
         return os.getenv("JWT_ALGORITHM", "HS256")
     
+    # ===================
+    # AI / Anthropic Settings
+    # ===================
+
+    @property
+    def ANTHROPIC_API_KEY(self) -> Optional[str]:
+        """Anthropic API key for the AI proxy (Nifty Options Analyzer).
+        Set ANTHROPIC_API_KEY in .env — never exposed to the browser.
+        """
+        return os.getenv("ANTHROPIC_API_KEY")
+
     # ===================
     # Google OAuth Settings
     # ===================

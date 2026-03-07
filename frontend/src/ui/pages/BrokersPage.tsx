@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link2, RefreshCcw, Trash2 } from 'lucide-react'
+import { Crown, Link2, RefreshCcw, Trash2 } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { api } from '../../lib/api'
 import { Card } from '../components/Card'
 import { BrokerSetupForm } from '../components/BrokerSetupForm'
+import { UpgradeModal } from '../components/UpgradeModal'
+import { useSubscription } from '../../hooks/useSubscription'
 import { type Portfolio } from '../../types/domain'
 import { useAppStore } from '../../store/appStore'
 
@@ -26,6 +28,8 @@ async function fetchBrokerConfigs() {
 
 const brokers = [
   { key: 'zerodha', name: 'Zerodha', icon: '📊', implemented: true },
+  { key: 'groww', name: 'Groww', icon: '🌱', implemented: true },
+  { key: 'dhan', name: 'Dhan', icon: '🔷', implemented: true },
   { key: 'angel', name: 'Angel Broking', icon: '💼', implemented: false },
   { key: 'fivepaisa', name: '5Paisa', icon: '💰', implemented: true },
 ]
@@ -106,6 +110,9 @@ export function BrokersPage() {
   })
 
   const connectedBrokerList = query.data ?? []
+  const { isPro, maxBrokers } = useSubscription()
+  const [showUpgrade, setShowUpgrade] = useState(false)
+  const atBrokerLimit = !isPro && connectedBrokerList.filter(c => c.is_active).length >= maxBrokers
 
   useEffect(() => {
     if (!connectedBrokerList.length) return
@@ -140,9 +147,29 @@ export function BrokersPage() {
     },
   })
 
+  const completeGroww = useMutation({
+    mutationFn: async (code: string) => {
+      const { data } = await api.post('/broker/groww/callback', undefined, {
+        params: { request_token: code },
+      })
+      return data
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['brokers', 'configs'] })
+      navigate('/app/brokers', { replace: true })
+    },
+  })
+
   useEffect(() => {
     // Check for request_token in URL (used by both Zerodha and 5Paisa)
     const requestToken = searchParams.get('request_token')
+
+    // Groww OAuth uses ?code= param
+    const growwCode = searchParams.get('code')
+    if (growwCode) {
+      completeGroww.mutate(growwCode)
+      return
+    }
 
     // Handle 5Paisa callback - token is a JWT (starts with eyJ)
     const fivepaisaToken = searchParams.get('RequestToken') || searchParams.get('accessToken')
@@ -304,9 +331,35 @@ export function BrokersPage() {
           </div>
         </Card>
       ) : null}
+      {completeGroww.isError ? (
+        <Card>
+          <div className="text-sm text-danger">
+            {(completeGroww.error as any)?.response?.data?.detail ?? (completeGroww.error as Error).message}
+          </div>
+          <div className="mt-1 text-sm text-muted">
+            If Groww redirected back here, re-run "Connect Groww" if needed.
+          </div>
+        </Card>
+      ) : null}
       {/* Setup Section */}
       <div>
         <h2 className="text-sm font-semibold mb-3 text-muted">Connect a Broker</h2>
+
+        {/* Broker limit banner for free users */}
+        {atBrokerLimit && (
+          <div className="mb-3 flex items-center gap-3 rounded-xl bg-amber-500/10 border border-amber-500/30 px-4 py-3">
+            <Crown className="w-4 h-4 text-amber-400 flex-shrink-0" />
+            <div className="flex-1 text-sm text-amber-300">
+              You've reached the <strong>Free plan limit</strong> of {maxBrokers} broker connections.
+            </div>
+            <button
+              onClick={() => setShowUpgrade(true)}
+              className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-500 transition-colors whitespace-nowrap"
+            >
+              Upgrade to Pro
+            </button>
+          </div>
+        )}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           {brokers.map((broker) => {
             const config = connectedBrokerList.find(c => c.broker_name === broker.key)
@@ -356,7 +409,7 @@ export function BrokersPage() {
                       onSuccess={() => queryClient.invalidateQueries({ queryKey: ['brokers', 'configs'] })}
                     />
                   )}
-                  {isConnected && !isAuthorized && (broker.key === 'zerodha' || broker.key === 'fivepaisa') && (
+                  {isConnected && !isAuthorized && (broker.key === 'zerodha' || broker.key === 'fivepaisa' || broker.key === 'groww') && (
                     <button
                       onClick={async () => {
                         try {
@@ -371,7 +424,7 @@ export function BrokersPage() {
                       Login to {broker.name}
                     </button>
                   )}
-                  {isConnected && isAuthorized && (broker.key === 'zerodha' || broker.key === 'fivepaisa') && (
+                  {isConnected && isAuthorized && (broker.key === 'zerodha' || broker.key === 'fivepaisa' || broker.key === 'groww') && (
                     <button
                       onClick={async () => {
                         try {
@@ -457,6 +510,11 @@ export function BrokersPage() {
           </div>
         )}
       </div>
+      <UpgradeModal
+        open={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        reason={`You've reached the Free plan limit of ${maxBrokers} broker connections. Upgrade to Pro to connect up to 5 brokers.`}
+      />
     </div>
   )
 }

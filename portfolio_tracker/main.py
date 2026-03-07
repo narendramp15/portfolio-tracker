@@ -14,9 +14,10 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from portfolio_tracker.config import settings
 from portfolio_tracker.database import create_tables
-from portfolio_tracker.routers import (analysis, auth, broker,
-                                       broker_token_refresh, dashboard, market,
-                                       portfolio, tax_reports, transactions)
+from portfolio_tracker.routers import (ai_proxy, analysis, auth, billing,
+                                       broker, broker_token_refresh, dashboard,
+                                       market, portfolio, tax_reports,
+                                       transactions)
 
 # Configure logging
 logging.basicConfig(
@@ -165,6 +166,8 @@ _app.include_router(broker.router, prefix="/api/broker", tags=["broker"])
 _app.include_router(analysis.router, prefix="/api/analysis", tags=["analysis"])
 _app.include_router(tax_reports.router, prefix="/api", tags=["tax-reports"])
 _app.include_router(broker_token_refresh.router, prefix="/api/broker", tags=["broker-token"])
+_app.include_router(ai_proxy.router, prefix="/api/ai", tags=["ai"])
+_app.include_router(billing.router, prefix="/api/billing", tags=["billing"])
 
 
 # Public pages (no authentication required)

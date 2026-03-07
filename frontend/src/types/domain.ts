@@ -13,6 +13,29 @@ export type TokenResponse = {
   user: User
 }
 
+// ---------------------------------------------------------------------------
+// Subscription / billing types
+// ---------------------------------------------------------------------------
+
+export type SubscriptionTier = 'free' | 'pro' | 'teams'
+
+export type PlanLimits = {
+  max_brokers: number | null        // null = unlimited
+  exports_per_month: number | null  // null = unlimited
+  auto_sync: string                 // 'daily' | 'hourly'
+}
+
+export type SubscriptionStatus = {
+  tier: SubscriptionTier
+  status: 'active' | 'cancelled' | 'expired'
+  expires_at: string | null
+  limits: PlanLimits
+  usage: {
+    exports_this_month: number
+  }
+  razorpay_key_id: string | null
+}
+
 export type DashboardStats = {
   total_portfolio_value: number
   total_invested: number

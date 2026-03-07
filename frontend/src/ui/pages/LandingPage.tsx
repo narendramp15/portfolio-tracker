@@ -67,12 +67,15 @@ export function LandingPage() {
                         <button onClick={() => scrollToSection('contact')} className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors">
                             Contact
                         </button>
+                        {/* <button onClick={() => navigate('/options-analyzer')} className="text-sm font-medium text-white bg-gradient-to-r from-emerald-500 to-teal-500 px-3 py-1.5 rounded-lg hover:shadow-md transition-all flex items-center gap-1.5">
+                            <span>⚡</span> Options Analyzer
+                        </button> */}
                     </div>
 
                     <div className="flex items-center gap-3">
                         <button
                             onClick={() => navigate('/login')}
-                            className="hidden sm:block px-4 py-2 text-sm font-medium text-text hover:text-indigo-600 transition-colors"
+                            className="hidden sm:block px-4 py-2 text-sm font-medium text-slate-700 hover:text-indigo-600 transition-colors"
                         >
                             Login
                         </button>
@@ -111,6 +114,9 @@ export function LandingPage() {
                             <button onClick={() => scrollToSection('contact')} className="px-4 py-3 text-left text-sm font-medium text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors">
                                 Contact
                             </button>
+                            <button onClick={() => { navigate('/options-analyzer'); setMobileMenuOpen(false) }} className="px-4 py-3 text-left text-sm font-medium text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors flex items-center gap-2">
+                                <span>⚡</span> Options Analyzer
+                            </button>
                             <hr className="my-2 border-slate-100" />
                             <button
                                 onClick={() => { navigate('/login'); setMobileMenuOpen(false) }}
@@ -130,28 +136,24 @@ export function LandingPage() {
                         {/* Left: Copy */}
                         <div className="text-left">
                             {/* Built By Badge - Honest Founder Credentials */}
-                            <div className="inline-flex items-center gap-3 mb-6 px-4 py-2 bg-gradient-to-r from-slate-50 to-indigo-50 border border-slate-200 rounded-full">
-                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-sm text-white font-bold">
+                            <div className="inline-flex items-center gap-2 mb-6 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-full">
+                                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xs text-white font-bold shrink-0">
                                     P
                                 </div>
-                                <div className="text-sm">
-                                    <span className="text-slate-600">Built by </span>
-                                    <span className="font-semibold text-slate-800">Priya</span>
-                                    <span className="text-slate-500"> • Founder of QuantLeap</span>
-                                </div>
-                                <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
+                                <span className="text-xs text-slate-600">Built by <span className="font-semibold text-slate-800">Priya</span>, Founder</span>
+                                <div className="flex items-center gap-1.5 pl-2 border-l border-indigo-200">
                                     <a href="https://github.com/priyaprasadblr" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-slate-700 transition-colors">
-                                        <Github className="h-4 w-4" />
+                                        <Github className="h-3.5 w-3.5" />
                                     </a>
                                     <a href="https://www.linkedin.com/in/priya-prasad-0299b33a9" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-blue-600 transition-colors">
-                                        <Linkedin className="h-4 w-4" />
+                                        <Linkedin className="h-3.5 w-3.5" />
                                     </a>
                                 </div>
                             </div>
 
                             {/* Headline */}
                             <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight mb-6">
-                                <span className="text-text">Track all your investments in </span>
+                                <span className="text-slate-800">Track all your investments in </span>
                                 <span className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
                                     one intelligent dashboard
                                 </span>
@@ -159,9 +161,9 @@ export function LandingPage() {
 
                             {/* Subheadline with specific benefits */}
                             <p className="text-xl text-muted mb-8 leading-relaxed">
-                                Connect <span className="font-semibold text-text">Zerodha, Angel & 5Paisa</span> in seconds.
+                                Connect <span className="font-semibold text-indigo-600">Zerodha, Groww & 5Paisa</span> in seconds.
                                 Get live P&L, AI-powered insights, and tax-ready reports —
-                                <span className="font-semibold text-text"> all automatically synced</span>.
+                                <span className="font-semibold text-slate-800"> all automatically synced</span>.
                             </p>
 
                             {/* CTAs */}
@@ -298,7 +300,7 @@ export function LandingPage() {
                                     </div>
                                     <div>
                                         <div className="text-xs text-muted">Zerodha synced</div>
-                                        <div className="text-sm font-semibold text-text">12 holdings imported</div>
+                                        <div className="text-sm font-semibold text-slate-800">12 holdings imported</div>
                                     </div>
                                 </div>
                             </div>
@@ -327,17 +329,21 @@ export function LandingPage() {
                                 </div>
                                 Zerodha
                             </div>
-                            <div className="flex items-center gap-2 text-lg font-semibold text-slate-400 opacity-50 cursor-not-allowed" title="Coming soon">
-                                <div className="w-10 h-10 rounded-lg bg-blue-100/50 flex items-center justify-center text-blue-600/50 font-bold grayscale">A</div>
-                                <span className="text-slate-400">Angel One</span>
+                            <div className="flex items-center gap-2 text-lg font-semibold text-slate-600">
+                                <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center text-green-600 font-bold text-lg">🌱</div>
+                                Groww
+                            </div>
+                            <div className="flex items-center gap-2 text-lg font-semibold text-slate-600">
+                                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-lg">🔷</div>
+                                Dhan
                             </div>
                             <div className="flex items-center gap-2 text-lg font-semibold text-slate-600">
                                 <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600 font-bold">5</div>
                                 5Paisa
                             </div>
-                            <div className="flex items-center gap-2 text-lg font-semibold text-slate-400">
-                                <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 font-bold">+</div>
-                                More coming
+                            <div className="flex items-center gap-2 text-lg font-semibold text-slate-400 opacity-50 cursor-not-allowed" title="Coming soon">
+                                <div className="w-10 h-10 rounded-lg bg-blue-100/50 flex items-center justify-center text-blue-600/50 font-bold grayscale">A</div>
+                                <span className="text-slate-400">Angel One</span>
                             </div>
                         </div>
                     </div>
@@ -443,7 +449,7 @@ export function LandingPage() {
                         iconColor="text-purple-600"
                         feature="One-Click Broker Sync"
                         benefit="No manual uploads. Zero data entry. Ever."
-                        description="Connect Zerodha, Angel One, or 5Paisa in seconds. Your holdings sync automatically via secure OAuth2."
+                        description="Connect Zerodha, Groww, Dhan, or 5Paisa in seconds. Your holdings sync automatically via secure OAuth2."
                     />
                     <FeatureBenefitCard
                         icon={<LineChart className="h-7 w-7" />}
@@ -493,7 +499,7 @@ export function LandingPage() {
                             <div className="text-indigo-200 text-sm">Broker Sync Time</div>
                         </div>
                         <div>
-                            <div className="text-3xl md:text-4xl font-bold mb-1">3</div>
+                            <div className="text-3xl md:text-4xl font-bold mb-1">5</div>
                             <div className="text-indigo-200 text-sm">Brokers Supported</div>
                         </div>
                         <div>
@@ -518,7 +524,7 @@ export function LandingPage() {
                     <StepCard
                         number="2"
                         title="Connect Brokers"
-                        description="Link your Zerodha, Angel, or 5Paisa accounts securely via OAuth."
+                        description="Link your Zerodha, Groww, Dhan, or 5Paisa accounts securely."
                     />
                     <StepCard
                         number="3"
@@ -567,7 +573,7 @@ export function LandingPage() {
 
                         <ul className="space-y-4 mb-8">
                             <PricingFeature text="Unlimited portfolios" included />
-                            <PricingFeature text="Connect 2 brokers (Zerodha, 5Paisa)" included />
+                            <PricingFeature text="Connect all brokers (Zerodha, Groww, Dhan, 5Paisa)" included />
                             <PricingFeature text="Real-time P&L tracking" included />
                             <PricingFeature text="Technical indicators (RSI, MACD)" included />
                             <PricingFeature text="Tax reports (STCG/LTCG)" included />

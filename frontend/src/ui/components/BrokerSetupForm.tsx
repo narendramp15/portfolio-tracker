@@ -4,7 +4,7 @@ import { Loader2, Plus, X } from 'lucide-react'
 import { api } from '../../lib/api'
 import { Card } from './Card'
 
-type BrokerType = 'zerodha' | 'angel' | 'fivepaisa'
+type BrokerType = 'zerodha' | 'angel' | 'fivepaisa' | 'groww' | 'dhan'
 
 interface BrokerSetupFormProps {
     brokerType: BrokerType
@@ -16,12 +16,16 @@ const brokerIcons: Record<BrokerType, string> = {
     zerodha: '📊',
     angel: '💼',
     fivepaisa: '💰',
+    groww: '🌱',
+    dhan: '🔷',
 }
 
 const brokerColors: Record<BrokerType, string> = {
     zerodha: 'from-purple-600 via-purple-500 to-violet-600',
     angel: 'from-pink-600 via-pink-500 to-rose-600',
     fivepaisa: 'from-cyan-600 via-cyan-500 to-blue-600',
+    groww: 'from-green-600 via-emerald-500 to-teal-600',
+    dhan: 'from-blue-600 via-blue-500 to-indigo-600',
 }
 
 export function BrokerSetupForm({ brokerType, brokerName, onSuccess }: BrokerSetupFormProps) {
@@ -38,6 +42,7 @@ export function BrokerSetupForm({ brokerType, brokerName, onSuccess }: BrokerSet
     const [consentGiven, setConsentGiven] = useState(false)
 
     const isFivePaisa = brokerType === 'fivepaisa'
+    const isDhan = brokerType === 'dhan'
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault()
@@ -56,11 +61,17 @@ export function BrokerSetupForm({ brokerType, brokerName, onSuccess }: BrokerSet
                     password: password5p,
                     consent_given: consentGiven.toString(),
                 }
-                : {
-                    api_key: apiKey,
-                    api_secret: apiSecret,
-                    consent_given: consentGiven.toString(),
-                }
+                : isDhan
+                    ? {
+                        client_id: apiKey,
+                        access_token: apiSecret,
+                        consent_given: consentGiven.toString(),
+                    }
+                    : {
+                        api_key: apiKey,
+                        api_secret: apiSecret,
+                        consent_given: consentGiven.toString(),
+                    }
 
             const response = await api.post(`/broker/${brokerType}/setup`, undefined, { params })
 
@@ -79,7 +90,8 @@ export function BrokerSetupForm({ brokerType, brokerName, onSuccess }: BrokerSet
                 onSuccess?.()
 
                 // Redirect for OAuth login
-                if (loginUrl) {
+                // Dhan is authorized immediately — no OAuth redirect needed
+                if (loginUrl && !isDhan) {
                     window.location.href = loginUrl
                 }
             }
@@ -123,13 +135,13 @@ export function BrokerSetupForm({ brokerType, brokerName, onSuccess }: BrokerSet
             <form onSubmit={handleSubmit} className="space-y-3">
                 <div>
                     <label className="block text-xs font-semibold text-muted mb-1">
-                        {isFivePaisa ? 'User Key (Vendor Key)' : 'API Key'}
+                        {isFivePaisa ? 'User Key (Vendor Key)' : isDhan ? 'Client ID' : 'API Key'}
                     </label>
                     <input
-                        type="password"
+                        type={isDhan ? 'text' : 'password'}
                         value={apiKey}
                         onChange={(e) => setApiKey(e.target.value)}
-                        placeholder={isFivePaisa ? 'Enter your User Key' : 'Enter your API key'}
+                        placeholder={isFivePaisa ? 'Enter your User Key' : isDhan ? 'Enter your Dhan Client ID' : 'Enter your API key'}
                         className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text placeholder-muted focus:border-primary focus:outline-none"
                         required
                         disabled={isLoading}
@@ -138,13 +150,13 @@ export function BrokerSetupForm({ brokerType, brokerName, onSuccess }: BrokerSet
 
                 <div>
                     <label className="block text-xs font-semibold text-muted mb-1">
-                        {isFivePaisa ? 'Encryption Key' : 'API Secret'}
+                        {isFivePaisa ? 'Encryption Key' : isDhan ? 'Access Token' : 'API Secret'}
                     </label>
                     <input
                         type="password"
                         value={apiSecret}
                         onChange={(e) => setApiSecret(e.target.value)}
-                        placeholder={isFivePaisa ? 'Enter your Encryption Key' : 'Enter your API secret'}
+                        placeholder={isFivePaisa ? 'Enter your Encryption Key' : isDhan ? 'Enter your Dhan Access Token' : 'Enter your API secret'}
                         className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text placeholder-muted focus:border-primary focus:outline-none"
                         required
                         disabled={isLoading}

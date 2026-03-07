@@ -68,6 +68,11 @@ export function LoginPage() {
 
       <div className="w-full max-w-md">
         <div className="rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-900/50 to-slate-900/50 backdrop-blur-xl shadow-2xl p-8 hover:border-blue-400/50 transition-all duration-300">
+          <div className="mb-6">
+            <Link to="/" className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-400/70 hover:text-blue-300 transition-colors">
+              <span>←</span> Back to Home
+            </Link>
+          </div>
           <div className="mb-8 flex items-center gap-4">
             <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-lg hover:shadow-2xl transition-all duration-300">
               <BarChart3 className="h-7 w-7" />

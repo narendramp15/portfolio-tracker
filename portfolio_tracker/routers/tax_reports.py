@@ -1,11 +1,15 @@
 """Tax reports router for capital gains calculations."""
 
+import csv
+from io import StringIO
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 
-from portfolio_tracker.deps import get_current_user, get_db
+from portfolio_tracker.deps import (check_export_limit, get_current_user,
+                                    get_db, log_export)
 from portfolio_tracker.models import (PortfolioModel, TransactionModel,
                                       UserModel)
 from portfolio_tracker.services.tax_calculator import TaxCalculator
@@ -193,3 +197,76 @@ def get_tax_summary(
         "portfolio_name": portfolio.name,
         "years": years_summary
     }
+
+
+@router.get("/portfolios/{portfolio_id}/capital-gains/export")
+def export_capital_gains_csv(
+    portfolio_id: int,
+    financial_year: Optional[str] = None,
+    method: str = "FIFO",
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Export capital gains report as CSV (gated — Free plan: 3 exports/month).
+    """
+    check_export_limit(user, db)
+
+    portfolio = db.query(PortfolioModel).filter(
+        PortfolioModel.id == portfolio_id,
+        PortfolioModel.user_id == user.id,
+    ).first()
+    if not portfolio:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+
+    transactions = (
+        db.query(TransactionModel)
+        .options(joinedload(TransactionModel.asset))
+        .filter(TransactionModel.portfolio_id == portfolio_id)
+        .order_by(TransactionModel.transaction_date)
+        .all()
+    )
+
+    if financial_year:
+        transactions = TaxCalculator.filter_by_financial_year(transactions, financial_year)
+
+    if method not in ["FIFO", "LIFO"]:
+        raise HTTPException(status_code=400, detail="Method must be FIFO or LIFO")
+
+    report = TaxCalculator.calculate_capital_gains(transactions, method=method)
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Symbol", "Type", "Buy Date", "Sell Date",
+        "Quantity", "Buy Price (₹)", "Sell Price (₹)",
+        "Gain/Loss (₹)", "Holding Days",
+    ])
+
+    for symbol, data in report.get("by_symbol", {}).items():
+        for t in data.get("stcg_transactions", []):
+            writer.writerow([
+                symbol, "STCG",
+                t.get("buy_date", ""), t.get("sell_date", ""),
+                t.get("quantity", ""), t.get("buy_price", ""), t.get("sell_price", ""),
+                t.get("gain", ""), t.get("holding_days", ""),
+            ])
+        for t in data.get("ltcg_transactions", []):
+            writer.writerow([
+                symbol, "LTCG",
+                t.get("buy_date", ""), t.get("sell_date", ""),
+                t.get("quantity", ""), t.get("buy_price", ""), t.get("sell_price", ""),
+                t.get("gain", ""), t.get("holding_days", ""),
+            ])
+
+    output.seek(0)
+    fy_label = financial_year or "all"
+    log_export(user, "tax_report", db)
+
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename=tax-report-{portfolio.name}-{fy_label}.csv"
+        },
+    )
