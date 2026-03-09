@@ -180,8 +180,8 @@ export function OptionsBillingPage() {
                         setUpgradeMsg('Credits added to your account!')
                     },
                 }
-                // @ts-expect-error Razorpay loaded via CDN
-                const rz = new window.Razorpay(options)
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const rz = new (window as any).Razorpay(options)
                 rz.open()
             } else if (data.credits_added) {
                 setUpgradeMsg(`${data.credits_added} credits added!`)
