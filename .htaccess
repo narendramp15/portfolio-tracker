@@ -1,0 +1,22 @@
+# cPanel / Passenger .htaccess for FastAPI (Portfolio Tracker)
+# Place this file in the public root of your cPanel application
+# (usually public_html/ or a subdirectory you point the app at).
+
+# ── Passenger / Python Selector glue ────────────────────────────────────────
+PassengerEnabled On
+PassengerAppType wsgi
+PassengerStartupFile passenger_wsgi.py
+
+# If cPanel auto-generated a PassengerAppRoot line, keep it here.
+# PassengerAppRoot /home/<cpanel_user>/portfolio-tracker
+
+# ── Rewrite all requests to Passenger ───────────────────────────────────────
+Options -MultiViews
+RewriteEngine On
+
+# Don't rewrite requests for real static files / directories
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# Forward everything else to Passenger
+RewriteRule ^(.*)$ passenger_wsgi.py/$1 [QSA,L]

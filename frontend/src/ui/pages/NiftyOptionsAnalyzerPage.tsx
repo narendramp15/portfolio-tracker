@@ -1,278 +1,48 @@
 import { useState, useEffect } from 'react'
+import { api } from '../../lib/api'
 
 const ACCENT = '#00ff9d'
-const BG = '#0a0e1a'
-const CARD = '#111827'
-const BORDER = '#1e2d40'
+const BG = '#040c15'
+const CARD = '#080f1a'
+const BORDER = '#112030'
 const RED = '#ff4d6d'
 const GREEN = '#00ff9d'
 const YELLOW = '#ffd166'
+const PURPLE = '#a78bfa'
+const BLUE = '#38bdf8'
 
-// ── Model & pricing constants ──────────────────────────────────────────────
-const MODEL_QUICK = 'claude-haiku-4-5-20251001'   // $1 / $5 per MTok
-const MODEL_FULL = 'claude-sonnet-4-6'           // $3 / $15 per MTok
-// Cache reads: $0.30/MTok — 90% saving on the repeated system prompt
-const PRICE: Record<string, { input: number; output: number; cacheRead: number }> = {
-    [MODEL_QUICK]: { input: 1.0, output: 5.0, cacheRead: 0.10 },
-    [MODEL_FULL]: { input: 3.0, output: 15.0, cacheRead: 0.30 },
-}
-const USD_TO_INR = 84
-
+// ── Types ────────────────────────────────────────────────────────────────────
 interface TokenUsage {
     inputTokens: number
     outputTokens: number
     cacheReadTokens: number
     cacheWriteTokens: number
-    estimatedCostUSD: number
-    model: string
+    costInr: number
+    cached: boolean
+}
+
+interface UsageData {
+    tier: string
+    tier_label: string
+    credits: number
+    analyses_today: number
+    daily_limit: number
+    circuit_breaker_hit: boolean
+    allowed_types: string[]
+    credits_per_analysis: Record<string, number>
+    cooldown_seconds: number
 }
 
 // ────────────────────────────────────────────────────────────────────────────
 
-const styles: Record<string, React.CSSProperties> = {
-    app: {
-        minHeight: '100vh',
-        background: BG,
-        fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-        color: '#e2e8f0',
-        padding: '0',
-    },
-    header: {
-        background: 'linear-gradient(135deg, #0d1b2a 0%, #0a0e1a 100%)',
-        borderBottom: `1px solid ${BORDER}`,
-        padding: '18px 32px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        position: 'sticky',
-        top: 0,
-        zIndex: 100,
-        backdropFilter: 'blur(12px)',
-    },
-    logo: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px',
-        fontSize: '18px',
-        fontWeight: '700',
-        letterSpacing: '0.05em',
-        color: ACCENT,
-    },
-    badge: {
-        background: `${ACCENT}20`,
-        border: `1px solid ${ACCENT}60`,
-        color: ACCENT,
-        fontSize: '10px',
-        padding: '2px 8px',
-        borderRadius: '4px',
-        letterSpacing: '0.15em',
-    },
-    liveIndicator: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '6px',
-        fontSize: '11px',
-        color: '#64748b',
-    },
-    liveDot: {
-        width: '7px',
-        height: '7px',
-        borderRadius: '50%',
-        background: GREEN,
-        boxShadow: `0 0 8px ${GREEN}`,
-    },
-    main: {
-        maxWidth: '1280px',
-        margin: '0 auto',
-        padding: '28px 24px',
-    },
-    grid: {
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: '16px',
-        marginBottom: '20px',
-    },
-    card: {
-        background: CARD,
-        border: `1px solid ${BORDER}`,
-        borderRadius: '12px',
-        padding: '20px',
-        position: 'relative',
-        overflow: 'hidden',
-    },
-    cardTitle: {
-        fontSize: '10px',
-        letterSpacing: '0.2em',
-        color: '#475569',
-        marginBottom: '14px',
-        textTransform: 'uppercase',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-    },
-    dataRow: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: '8px 0',
-        borderBottom: `1px solid ${BORDER}`,
-    },
-    label: {
-        fontSize: '11px',
-        color: '#64748b',
-    },
-    value: {
-        fontSize: '13px',
-        fontWeight: '600',
-        color: '#e2e8f0',
-    },
-    valueGreen: { color: GREEN, fontWeight: '700' },
-    valueRed: { color: RED, fontWeight: '700' },
-    valueYellow: { color: YELLOW, fontWeight: '700' },
-    bigNumber: {
-        fontSize: '28px',
-        fontWeight: '800',
-        letterSpacing: '-0.02em',
-        lineHeight: 1,
-        marginBottom: '4px',
-    },
-    changeTag: {
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '4px',
-        fontSize: '12px',
-        padding: '2px 8px',
-        borderRadius: '4px',
-        fontWeight: '600',
-    },
-    inputGroup: {
-        marginBottom: '12px',
-    },
-    inputLabel: {
-        fontSize: '10px',
-        color: '#475569',
-        letterSpacing: '0.12em',
-        marginBottom: '5px',
-        display: 'block',
-        textTransform: 'uppercase',
-    } as React.CSSProperties,
-    input: {
-        width: '100%',
-        background: '#0d1b2a',
-        border: `1px solid ${BORDER}`,
-        borderRadius: '6px',
-        padding: '8px 12px',
-        color: '#e2e8f0',
-        fontSize: '12px',
-        fontFamily: 'inherit',
-        outline: 'none',
-        boxSizing: 'border-box',
-        transition: 'border-color 0.2s',
-    } as React.CSSProperties,
-    select: {
-        width: '100%',
-        background: '#0d1b2a',
-        border: `1px solid ${BORDER}`,
-        borderRadius: '6px',
-        padding: '8px 12px',
-        color: '#e2e8f0',
-        fontSize: '12px',
-        fontFamily: 'inherit',
-        outline: 'none',
-        boxSizing: 'border-box',
-    } as React.CSSProperties,
-    btn: {
-        background: `linear-gradient(135deg, ${ACCENT}, #00c97a)`,
-        color: '#0a0e1a',
-        border: 'none',
-        borderRadius: '8px',
-        padding: '12px 28px',
-        fontSize: '12px',
-        fontWeight: '800',
-        fontFamily: 'inherit',
-        letterSpacing: '0.1em',
-        cursor: 'pointer',
-        textTransform: 'uppercase',
-        transition: 'all 0.2s',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-    } as React.CSSProperties,
-    btnSecondary: {
-        background: 'transparent',
-        color: ACCENT,
-        border: `1px solid ${ACCENT}50`,
-        borderRadius: '8px',
-        padding: '10px 20px',
-        fontSize: '11px',
-        fontWeight: '600',
-        fontFamily: 'inherit',
-        letterSpacing: '0.08em',
-        cursor: 'pointer',
-        textTransform: 'uppercase',
-        transition: 'all 0.2s',
-    } as React.CSSProperties,
-    aiResponse: {
-        background: '#0d1b2a',
-        border: `1px solid ${ACCENT}30`,
-        borderRadius: '10px',
-        padding: '20px',
-        fontSize: '13px',
-        lineHeight: '1.8',
-        color: '#cbd5e1',
-        minHeight: '100px',
-        position: 'relative',
-    },
-    loading: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px',
-        color: ACCENT,
-        fontSize: '13px',
-    },
-    spinner: {
-        width: '16px',
-        height: '16px',
-        border: `2px solid ${ACCENT}30`,
-        borderTop: `2px solid ${ACCENT}`,
-        borderRadius: '50%',
-        animation: 'spin 0.8s linear infinite',
-    },
-    sentimentBar: {
-        height: '6px',
-        borderRadius: '3px',
-        background: '#1e2d40',
-        marginTop: '10px',
-        overflow: 'hidden',
-    },
-    sectionTitle: {
-        fontSize: '12px',
-        letterSpacing: '0.15em',
-        color: ACCENT,
-        textTransform: 'uppercase',
-        marginBottom: '16px',
-        paddingBottom: '8px',
-        borderBottom: `1px solid ${BORDER}`,
-        fontWeight: '700',
-    } as React.CSSProperties,
-    tag: {
-        display: 'inline-flex',
-        padding: '3px 10px',
-        borderRadius: '4px',
-        fontSize: '11px',
-        fontWeight: '700',
-        letterSpacing: '0.08em',
-    },
-    alertBox: {
-        background: `${YELLOW}10`,
-        border: `1px solid ${YELLOW}40`,
-        borderRadius: '8px',
-        padding: '10px 14px',
-        fontSize: '11px',
-        color: YELLOW,
-        marginBottom: '14px',
-        lineHeight: '1.6',
-    },
+// Inline style helpers (shared atoms)
+const S = {
+    card: { background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', padding: '22px', position: 'relative', overflow: 'hidden' } as React.CSSProperties,
+    label: { fontSize: '10px', color: '#475569', letterSpacing: '0.15em', marginBottom: '5px', display: 'block', textTransform: 'uppercase' } as React.CSSProperties,
+    input: { width: '100%', background: '#060e18', border: `1px solid ${BORDER}`, borderRadius: '7px', padding: '9px 12px', color: '#e2e8f0', fontSize: '12px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.2s, box-shadow 0.2s' } as React.CSSProperties,
+    select: { width: '100%', background: '#060e18', border: `1px solid ${BORDER}`, borderRadius: '7px', padding: '9px 12px', color: '#e2e8f0', fontSize: '12px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' } as React.CSSProperties,
+    dataRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: `1px solid ${BORDER}` } as React.CSSProperties,
+    tag: { display: 'inline-flex', padding: '3px 10px', borderRadius: '4px', fontSize: '10px', fontWeight: '700', letterSpacing: '0.08em' } as React.CSSProperties,
 }
 
 const marketDefaults = {
@@ -383,12 +153,40 @@ export default function NiftyOptionsAnalyzerPage() {
     const [fetching, setFetching] = useState(false)
     const [error, setError] = useState('')
     const [currentTime, setCurrentTime] = useState(new Date())
-    const [analysisType, setAnalysisType] = useState<'quick' | 'full'>('full')
+    const [analysisType, setAnalysisType] = useState<'quick' | 'full' | 'advanced'>('quick')
     const [tokensUsed, setTokensUsed] = useState<TokenUsage | null>(null)
+    const [usage, setUsage] = useState<UsageData | null>(null)
+    const [cooldownUntil, setCooldownUntil] = useState<number | null>(null)
+    const [cooldownSecsLeft, setCooldownSecsLeft] = useState(0)
 
     useEffect(() => {
         const t = setInterval(() => setCurrentTime(new Date()), 1000)
         return () => clearInterval(t)
+    }, [])
+
+    // Countdown ticker for free-tier cooldown
+    useEffect(() => {
+        if (!cooldownUntil) return
+        const tick = setInterval(() => {
+            const left = Math.ceil((cooldownUntil - Date.now()) / 1000)
+            if (left <= 0) {
+                setCooldownSecsLeft(0)
+                setCooldownUntil(null)
+            } else {
+                setCooldownSecsLeft(left)
+            }
+        }, 250)
+        return () => clearInterval(tick)
+    }, [cooldownUntil])
+
+    useEffect(() => {
+        api.get<UsageData>('/ai/usage').then(r => setUsage(r.data)).catch(() => { })
+        // Auto-fetch live market data on first load
+        setFetching(true)
+        api.get<Partial<MarketData>>('/ai/market-snapshot')
+            .then(r => setData(d => ({ ...d, ...r.data })))
+            .catch(() => { })
+            .finally(() => setFetching(false))
     }, [])
 
     const IST = currentTime.toLocaleString('en-IN', {
@@ -413,18 +211,17 @@ export default function NiftyOptionsAnalyzerPage() {
 
     const fetchLiveData = async () => {
         setFetching(true)
-        await new Promise((r) => setTimeout(r, 1800))
-        setData((d) => ({
-            ...d,
-            niftyClose: '24765.90',
-            bankniftyClose: '59055.85',
-            giftNifty: (24765 + Math.floor(Math.random() * 120 - 60)).toString(),
-            vix: (13 + Math.random() * 2).toFixed(2),
-        }))
-        setFetching(false)
+        try {
+            const res = await api.get<Partial<MarketData>>('/ai/market-snapshot')
+            setData(d => ({ ...d, ...res.data }))
+        } catch {
+            // If live fetch fails, silently keep existing values
+        } finally {
+            setFetching(false)
+        }
     }
 
-    // Calls the backend proxy — the API key never leaves the server
+    // Calls the backend proxy — API key never leaves the server; tier enforced server-side
     const analyzeWithAI = async () => {
         setLoading(true)
         setError('')
@@ -432,45 +229,46 @@ export default function NiftyOptionsAnalyzerPage() {
         setTokensUsed(null)
 
         try {
-            const response = await fetch('/api/ai/nifty-analyze', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    analysis_type: analysisType,
-                    market_data: {
-                        ...data,
-                        today,
-                        ist: IST,
-                    },
-                }),
+            const res = await api.post('/ai/nifty-analyze', {
+                analysis_type: analysisType,
+                market_data: { ...data, today, ist: IST },
             })
+            const d2 = res.data
+            setAiResponse(d2.text || 'No response.')
 
-            const res = await response.json()
-            if (!response.ok) {
-                throw new Error(res.detail || `Server error ${response.status}`)
-            }
-
-            setAiResponse(res.text || 'No response.')
-
-            // ── Token & cost tracking ────────────────────────────
-            const model = res.model as string
-            const u = res.usage || {}
-            const inp = u.input_tokens || 0
-            const out = u.output_tokens || 0
-            const cRead = u.cache_read_input_tokens || 0
-            const cWrite = u.cache_creation_input_tokens || 0
-            const p = PRICE[model] ?? PRICE['claude-sonnet-4-6']
-            const costUSD =
-                ((inp - cRead) / 1_000_000) * p.input +
-                (cRead / 1_000_000) * p.cacheRead +
-                (out / 1_000_000) * p.output
+            const u = d2.usage || {}
             setTokensUsed({
-                inputTokens: inp, outputTokens: out,
-                cacheReadTokens: cRead, cacheWriteTokens: cWrite,
-                estimatedCostUSD: costUSD, model
+                inputTokens: u.input_tokens || 0,
+                outputTokens: u.output_tokens || 0,
+                cacheReadTokens: u.cache_read_input_tokens || 0,
+                cacheWriteTokens: u.cache_creation_input_tokens || 0,
+                costInr: u.cost_inr || 0,
+                cached: u.cached || false,
             })
-        } catch (e: unknown) {
-            setError('Error: ' + (e instanceof Error ? e.message : String(e)))
+            // Update usage counter without page reload
+            if (d2.analyses_today !== undefined) {
+                setUsage(prev => prev ? {
+                    ...prev,
+                    analyses_today: d2.analyses_today,
+                    daily_limit: d2.daily_limit,
+                    credits: d2.credits,
+                } : prev)
+            }
+            // Activate cooldown timer (free/starter tier)
+            if (d2.cooldown_seconds > 0) {
+                setCooldownUntil(Date.now() + d2.cooldown_seconds * 1000)
+            }
+        } catch (e: any) {
+            const detail = e?.response?.data?.detail || (e instanceof Error ? e.message : String(e))
+            if (e?.response?.status === 402) {
+                setError('⚡ ' + detail + ' Visit Billing to upgrade your plan.')
+            } else if (e?.response?.status === 403) {
+                setError('🔒 ' + detail)
+            } else if (e?.response?.status === 429) {
+                setError('⏳ ' + detail)
+            } else {
+                setError('Error: ' + detail)
+            }
         } finally {
             setLoading(false)
         }
@@ -480,269 +278,278 @@ export default function NiftyOptionsAnalyzerPage() {
     const vixNum = parseFloat(data.vix)
     const giftDiff = parseFloat(data.giftNifty) - parseFloat(data.niftyClose)
     const giftPct = ((giftDiff / parseFloat(data.niftyClose)) * 100).toFixed(2)
+    const tierColor = usage?.tier === 'elite' ? YELLOW : usage?.tier === 'pro' ? PURPLE : usage?.tier === 'starter' ? BLUE : ACCENT
+    const diiNum = parseFloat(data.diiActivity)
 
     return (
-        <div style={styles.app}>
+        <div style={{ minHeight: '100vh', background: BG, fontFamily: "'JetBrains Mono','Fira Code',monospace", color: '#e2e8f0' }}>
             <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&display=swap');
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-        @keyframes spin { to{transform:rotate(360deg)} }
-        @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-        .noa-pulse { animation: pulse 1.5s infinite; }
-        .noa-spin { animation: spin 0.8s linear infinite; }
-        .ai-out { animation: fadeIn 0.5s ease; }
-        .noa-input:focus { border-color: #00ff9d60 !important; box-shadow: 0 0 0 2px #00ff9d15; }
-        .noa-btn:hover { opacity: 0.88; transform: translateY(-1px); }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #0a0e1a; }
-        ::-webkit-scrollbar-thumb { background: #1e2d40; border-radius: 3px; }
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
+        @keyframes spin  { to { transform: rotate(360deg); } }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+        @keyframes fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes glow  { 0%,100%{box-shadow:0 0 18px ${ACCENT}30} 50%{box-shadow:0 0 32px ${ACCENT}60,0 0 60px ${ACCENT}20} }
+        @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+        .ai-out { animation: fadeUp .45s ease; }
+        .noa-spin { animation: spin .75s linear infinite; }
+        .noa-input:focus { border-color: ${ACCENT}60 !important; box-shadow: 0 0 0 3px ${ACCENT}12 !important; }
+        .noa-card-g  { background: linear-gradient(#080f1a,#080f1a) padding-box, linear-gradient(135deg,${ACCENT}35 0%,${BORDER} 50%,${ACCENT}10 100%) border-box; border:1px solid transparent; border-radius:14px; }
+        .noa-card-p  { background: linear-gradient(#080f1a,#080f1a) padding-box, linear-gradient(135deg,${PURPLE}35 0%,${BORDER} 50%,${PURPLE}10 100%) border-box; border:1px solid transparent; border-radius:14px; }
+        .noa-card-n  { background: linear-gradient(#080f1a,#080f1a) padding-box, linear-gradient(135deg,#1a2c3d50 0%,${BORDER} 100%) border-box; border:1px solid transparent; border-radius:14px; }
+        .noa-btn-primary { background:linear-gradient(135deg,${ACCENT},#00c97a); color:#030810; border:none; border-radius:10px; font-family:inherit; font-weight:800; letter-spacing:.1em; cursor:pointer; text-transform:uppercase; transition:all .2s; display:flex; align-items:center; gap:8px; }
+        .noa-btn-primary:hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 8px 24px ${ACCENT}40; }
+        .noa-btn-primary:disabled { opacity:.5; cursor:not-allowed; }
+        .noa-btn-outline { background:transparent; border:1px solid ${ACCENT}40; color:${ACCENT}; border-radius:8px; font-family:inherit; font-weight:600; letter-spacing:.08em; cursor:pointer; text-transform:uppercase; transition:all .2s; }
+        .noa-btn-outline:hover:not(:disabled) { background:${ACCENT}10; border-color:${ACCENT}80; }
+        .noa-btn-outline:disabled { opacity:.4; cursor:not-allowed; }
+        .noa-row:last-child { border-bottom:none !important; }
+        .noa-pill { display:inline-flex; align-items:center; padding:3px 10px; border-radius:4px; font-size:10px; font-weight:700; letter-spacing:.08em; }
+        .pulse-dot { width:7px; height:7px; border-radius:50%; background:${GREEN}; box-shadow:0 0 8px ${GREEN}; animation:pulse 1.8s infinite; }
+        ::-webkit-scrollbar { width:5px; height:5px; }
+        ::-webkit-scrollbar-track { background:${BG}; }
+        ::-webkit-scrollbar-thumb { background:#1a2c3d; border-radius:3px; }
+        .noa-type-btn { background:transparent; border:1px solid #1a2c3d; border-radius:8px; padding:10px 16px; font-family:inherit; font-size:11px; font-weight:600; letter-spacing:.08em; cursor:pointer; transition:all .2s; text-transform:uppercase; display:flex; flex-direction:column; align-items:center; gap:3px; }
+        .noa-type-btn:disabled { opacity:.35; cursor:not-allowed; }
+        .noa-data-row { display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid ${BORDER}; }
+        .noa-data-row:last-child { border-bottom:none; }
+        .dot-grid { background-image: radial-gradient(rgba(0,255,157,.04) 1px,transparent 1px); background-size:22px 22px; }
       `}</style>
 
-            {/* HEADER */}
-            <div style={styles.header}>
-                <div style={styles.logo}>
-                    <span>⚡</span>
-                    <span>NIFTY OPTIONS ANALYZER</span>
-                    <span style={styles.badge}>AI POWERED</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                    <div style={styles.liveIndicator}>
-                        <div style={{ ...styles.liveDot, animation: 'pulse 1.5s infinite' }} />
-                        <span>IST {IST}</span>
+            {/* ── TOP STATUS BAR ─────────────────────────────────────────── */}
+            <div style={{ background: '#020810', borderBottom: '1px solid #0a1624', padding: '5px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10px', letterSpacing: '0.08em' }}>
+                <span style={{ color: '#233040' }}>QUANTLEAP FINANCIAL  ·  OPTIONS ANALYZER v2.0</span>
+                <div style={{ display: 'flex', gap: '18px', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        <div className="pulse-dot" />
+                        <span style={{ color: '#475569' }}>IST {IST}</span>
                     </div>
-                    <div style={{ fontSize: '10px', color: '#334155', letterSpacing: '0.05em' }}>
-                        {today}
-                    </div>
-                    {/* API Secured indicator */}
-                    <div style={{ fontSize: '10px', color: '#00ff9d', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <span>🔒</span><span>API Secured</span>
-                    </div>
+                    <span style={{ color: '#233040' }}>{today}</span>
+                    {usage && (
+                        <>
+                            <span style={{ color: tierColor, background: `${tierColor}15`, border: `1px solid ${tierColor}35`, padding: '1px 9px', borderRadius: '3px', fontWeight: '700' }}>
+                                {usage.tier_label}
+                            </span>
+                            <span style={{ color: usage.analyses_today >= usage.daily_limit ? RED : '#475569' }}>
+                                {usage.analyses_today}<span style={{ color: '#233040' }}>/{usage.daily_limit}</span>
+                                <span style={{ color: '#233040' }}> analyses</span>
+                            </span>
+                            <span style={{ color: (usage.credits || 0) < 3 ? RED : '#475569' }}>
+                                ⚡ <span style={{ color: (usage.credits || 0) < 3 ? RED : '#64748b', fontWeight: '700' }}>{usage.credits}</span> credits
+                            </span>
+                        </>
+                    )}
+                    <span style={{ color: GREEN, display: 'flex', gap: '4px', alignItems: 'center' }}>🔒 Secured</span>
                 </div>
             </div>
 
+            {/* ── MAIN HEADER ───────────────────────────────────────────── */}
+            <div style={{ background: 'linear-gradient(180deg,#0a1625 0%,#060d14 100%)', borderBottom: `1px solid ${BORDER}`, padding: '20px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50, backdropFilter: 'blur(16px)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    {/* Logo icon */}
+                    <div style={{ width: '46px', height: '46px', background: `linear-gradient(135deg,${ACCENT},#00c47a)`, borderRadius: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', boxShadow: `0 0 28px ${ACCENT}45, 0 4px 12px #00000060`, flexShrink: 0 }}>⚡</div>
+                    <div>
+                        <div style={{ fontSize: '18px', fontWeight: '800', letterSpacing: '0.06em', color: '#f1f5f9', lineHeight: 1.1 }}>NIFTY OPTIONS ANALYZER</div>
+                        <div style={{ fontSize: '10px', color: '#334155', letterSpacing: '0.2em', marginTop: '3px' }}>AI-POWERED INTRADAY ANALYSIS  ·  INDIAN DERIVATIVES</div>
+                    </div>
+                    <span style={{ background: `${ACCENT}15`, border: `1px solid ${ACCENT}40`, color: ACCENT, fontSize: '9px', padding: '4px 10px', borderRadius: '4px', letterSpacing: '0.2em', fontWeight: '700', alignSelf: 'center' }}>AI POWERED</span>
+                </div>
+                <button className="noa-btn-outline" style={{ padding: '8px 18px', fontSize: '11px' }} onClick={fetchLiveData} disabled={fetching}>
+                    {fetching ? '⟳ Fetching...' : '⟳ Live Data'}
+                </button>
+            </div>
 
+            {/* ── MARKET PULSE STRIP ────────────────────────────────────── */}
+            <div style={{ background: '#040c14', borderBottom: '1px solid #0a1624', overflowX: 'auto' }}>
+                <div style={{ display: 'flex', minWidth: 'max-content' }}>
+                    {([
+                        { label: 'NIFTY 50', val: formatNum(data.niftyClose), color: GREEN, sub: '' },
+                        { label: 'BANK NIFTY', val: formatNum(data.bankniftyClose), color: PURPLE, sub: '' },
+                        { label: 'GIFT NIFTY', val: formatNum(data.giftNifty), color: giftDiff >= 0 ? GREEN : RED, sub: `${giftDiff >= 0 ? '+' : ''}${giftPct}%` },
+                        { label: 'INDIA VIX', val: data.vix, color: getVixColor(data.vix), sub: vixNum < 12 ? 'SELL OPT' : vixNum < 16 ? 'BALANCED' : 'BUY OPT' },
+                        { label: 'FII NET', val: `₹${fiiNum >= 0 ? '+' : ''}${formatNum(data.fiiActivity)}Cr`, color: fiiNum >= 0 ? GREEN : RED, sub: fiiNum >= 0 ? '▲ BUYING' : '▼ SELLING' },
+                        { label: 'DII NET', val: `₹${diiNum >= 0 ? '+' : ''}${formatNum(data.diiActivity)}Cr`, color: diiNum >= 0 ? GREEN : RED, sub: '' },
+                        { label: 'WTI CRUDE', val: `$${data.crude}`, color: '#e2e8f0', sub: '/bbl' },
+                        { label: 'DXY', val: data.dollarIndex, color: parseFloat(data.dollarIndex) > 104 ? RED : GREEN, sub: 'DOLLAR IDX' },
+                        { label: 'S&P 500', val: `${parseFloat(data.usMarket) >= 0 ? '' : ''}${data.usMarket}%`, color: parseFloat(data.usMarket) >= 0 ? GREEN : RED, sub: 'OVERNIGHT' },
+                    ] as Array<{ label: string; val: string; color: string; sub: string }>).map((item, i) => (
+                        <div key={i} style={{ padding: '9px 22px', borderRight: '1px solid #0a1624', flexShrink: 0 }}>
+                            <div style={{ fontSize: '8px', color: '#2d4258', letterSpacing: '0.2em', marginBottom: '3px' }}>{item.label}</div>
+                            <div style={{ fontSize: '13px', fontWeight: '700', color: item.color, letterSpacing: '-0.01em' }}>{item.val}</div>
+                            {item.sub && <div style={{ fontSize: '8px', color: item.color, opacity: 0.65, marginTop: '1px' }}>{item.sub}</div>}
+                        </div>
+                    ))}
+                </div>
+            </div>
 
-            <div style={styles.main}>
+            {/* ── PAGE BODY ─────────────────────────────────────────────── */}
+            <div className="dot-grid" style={{ maxWidth: '1320px', margin: '0 auto', padding: '28px 24px' }}>
 
-                {/* HOW TO USE — daily guide */}
-                <div style={{
-                    ...styles.alertBox,
-                    background: `${ACCENT}08`,
-                    border: `1px solid ${ACCENT}30`,
-                    color: '#94a3b8',
-                    marginBottom: '20px',
-                    fontSize: '12px',
-                    lineHeight: '1.8',
-                }}>
-                    <strong style={{ color: ACCENT }}>HOW TO USE EACH MORNING (before 9:15 AM):</strong>
-                    <br />
-                    1. Update the fields below with live data from NSE / Zerodha / Sensibull
-                    <br />
-                    2. Fill: Nifty &amp; Bank Nifty prev close, Gift Nifty, India VIX, FII/DII activity, Crude, Dollar Index
-                    <br />
-                    3. Add any major events (expiry, RBI meeting, key results) in the Events field
-                    <br />
-                    4. Choose <strong style={{ color: ACCENT }}>⚡ Quick</strong> (fast 150-word idea) or <strong style={{ color: ACCENT }}>📊 Full Report</strong> (complete strategy)
-                    <br />
-                    5. Hit <strong style={{ color: GREEN }}>Analyze with AI</strong> → get your trade plan instantly
+                {/* HOW-TO-USE banner */}
+                <div style={{ background: `${ACCENT}07`, border: `1px solid ${ACCENT}20`, borderRadius: '10px', padding: '12px 18px', marginBottom: '22px', fontSize: '11px', color: '#64748b', lineHeight: '1.9', display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
+                    <span style={{ color: ACCENT, fontSize: '16px', flexShrink: 0 }}>💡</span>
+                    <div>
+                        <span style={{ color: ACCENT, fontWeight: '700', letterSpacing: '.08em' }}>HOW TO USE —</span>{'  '}
+                        Before 9:15 AM: verify <strong style={{ color: '#94a3b8' }}>Nifty / BankNifty prev close</strong>, <strong style={{ color: '#94a3b8' }}>Gift Nifty</strong>, <strong style={{ color: '#94a3b8' }}>India VIX</strong>, <strong style={{ color: '#94a3b8' }}>FII/DII</strong>, <strong style={{ color: '#94a3b8' }}>Crude</strong>, <strong style={{ color: '#94a3b8' }}>DXY</strong> from{' '}
+                        <a href="https://www.nseindia.com" target="_blank" rel="noopener noreferrer" style={{ color: ACCENT }}>NSE</a> /{' '}
+                        <a href="https://kite.zerodha.com" target="_blank" rel="noopener noreferrer" style={{ color: ACCENT }}>Zerodha</a> /{' '}
+                        <a href="https://sensibull.com" target="_blank" rel="noopener noreferrer" style={{ color: ACCENT }}>Sensibull</a>.
+                        {' '}Edit the fields below, choose <strong style={{ color: ACCENT }}>⚡ Quick</strong> or <strong style={{ color: ACCENT }}>📊 Full Report</strong>, then hit <strong style={{ color: GREEN }}>Analyze with AI</strong>.
+                    </div>
                 </div>
 
-                {/* MARKET SNAPSHOT */}
-                <div style={styles.grid}>
-                    {/* Nifty Card */}
-                    <div style={{ ...styles.card, borderColor: `${GREEN}30` }}>
-                        <div style={styles.cardTitle}>
-                            <span style={{ color: GREEN }}>▲</span> NIFTY 50
+                {/* ── MARKET SNAPSHOT CARDS ─────────────────────────────── */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+
+                    {/* Nifty 50 */}
+                    <div className="noa-card-g" style={{ padding: '22px' }}>
+                        <div style={{ fontSize: '9px', letterSpacing: '.22em', color: '#334155', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '7px' }}>
+                            <span style={{ display: 'inline-block', width: '3px', height: '14px', background: `linear-gradient(${GREEN},#00c47a)`, borderRadius: '2px' }} />
+                            NIFTY 50
                         </div>
-                        <div style={{ ...styles.bigNumber, color: GREEN }}>{formatNum(data.niftyClose)}</div>
-                        <div style={{ display: 'flex', gap: '8px', marginTop: '8px', marginBottom: '12px' }}>
-                            <span style={{ ...styles.changeTag, background: `${GREEN}15`, color: GREEN }}>▲ PREV CLOSE</span>
+                        <div style={{ fontSize: '34px', fontWeight: '800', color: GREEN, letterSpacing: '-0.02em', lineHeight: 1, textShadow: `0 0 24px ${GREEN}50` }}>{formatNum(data.niftyClose)}</div>
+                        <div style={{ marginTop: '8px', marginBottom: '14px' }}>
+                            <span className="noa-pill" style={{ background: `${GREEN}15`, color: GREEN }}>PREV CLOSE</span>
                         </div>
-                        <div style={styles.dataRow}>
-                            <span style={styles.label}>Gift Nifty</span>
-                            <span style={{ ...styles.value, color: giftDiff >= 0 ? GREEN : RED }}>
-                                {formatNum(data.giftNifty)} ({giftDiff >= 0 ? '+' : ''}{giftPct}%)
+                        <div className="noa-data-row">
+                            <span style={{ fontSize: '11px', color: '#475569' }}>Gift Nifty</span>
+                            <span style={{ fontSize: '13px', fontWeight: '600', color: giftDiff >= 0 ? GREEN : RED }}>
+                                {formatNum(data.giftNifty)} <span style={{ fontSize: '11px' }}>({giftDiff >= 0 ? '+' : ''}{giftPct}%)</span>
                             </span>
                         </div>
-                        <div style={styles.dataRow}>
-                            <span style={styles.label}>Gap Open Expected</span>
-                            <span style={{ ...styles.value, color: giftDiff >= 0 ? GREEN : RED }}>
+                        <div className="noa-data-row">
+                            <span style={{ fontSize: '11px', color: '#475569' }}>Gap Open Signal</span>
+                            <span className="noa-pill" style={{ background: giftDiff >= 0 ? `${GREEN}15` : `${RED}15`, color: giftDiff >= 0 ? GREEN : RED }}>
                                 {giftDiff >= 0 ? '▲ GAP UP' : '▼ GAP DOWN'} ~{Math.abs(giftDiff).toFixed(0)} pts
                             </span>
                         </div>
                     </div>
 
-                    {/* BankNifty Card */}
-                    <div style={{ ...styles.card, borderColor: '#a78bfa30' }}>
-                        <div style={styles.cardTitle}>
-                            <span style={{ color: '#a78bfa' }}>▲</span> BANK NIFTY
+                    {/* Bank Nifty */}
+                    <div className="noa-card-p" style={{ padding: '22px' }}>
+                        <div style={{ fontSize: '9px', letterSpacing: '.22em', color: '#334155', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '7px' }}>
+                            <span style={{ display: 'inline-block', width: '3px', height: '14px', background: `linear-gradient(${PURPLE},#8b5cf6)`, borderRadius: '2px' }} />
+                            BANK NIFTY
                         </div>
-                        <div style={{ ...styles.bigNumber, color: '#a78bfa' }}>{formatNum(data.bankniftyClose)}</div>
-                        <div style={{ display: 'flex', gap: '8px', marginTop: '8px', marginBottom: '12px' }}>
-                            <span style={{ ...styles.changeTag, background: '#a78bfa15', color: '#a78bfa' }}>▲ PREV CLOSE</span>
+                        <div style={{ fontSize: '34px', fontWeight: '800', color: PURPLE, letterSpacing: '-0.02em', lineHeight: 1, textShadow: `0 0 24px ${PURPLE}40` }}>{formatNum(data.bankniftyClose)}</div>
+                        <div style={{ marginTop: '8px', marginBottom: '14px' }}>
+                            <span className="noa-pill" style={{ background: `${PURPLE}15`, color: PURPLE }}>PREV CLOSE</span>
                         </div>
-                        <div style={styles.dataRow}>
-                            <span style={styles.label}>India VIX</span>
-                            <span style={{ ...styles.value, color: getVixColor(data.vix) }}>{data.vix}</span>
+                        <div className="noa-data-row">
+                            <span style={{ fontSize: '11px', color: '#475569' }}>India VIX</span>
+                            <span style={{ fontSize: '13px', fontWeight: '700', color: getVixColor(data.vix) }}>{data.vix}</span>
                         </div>
-                        <div style={styles.dataRow}>
-                            <span style={styles.label}>VIX Signal</span>
-                            <span style={{
-                                ...styles.tag,
+                        <div className="noa-data-row">
+                            <span style={{ fontSize: '11px', color: '#475569' }}>VIX Signal</span>
+                            <span className="noa-pill" style={{
                                 background: vixNum < 12 ? `${GREEN}15` : vixNum < 16 ? `${YELLOW}15` : `${RED}15`,
                                 color: getVixColor(data.vix),
-                                fontSize: '10px',
                             }}>
                                 {vixNum < 12 ? '✓ SELL OPTIONS' : vixNum < 16 ? '↔ BALANCED' : '⚡ BUY OPTIONS'}
                             </span>
                         </div>
                     </div>
 
-                    {/* FII/DII Card */}
-                    <div style={styles.card}>
-                        <div style={styles.cardTitle}>🏦 FII / DII ACTIVITY</div>
-                        <div style={styles.dataRow}>
-                            <span style={styles.label}>FII Net</span>
-                            <div>
-                                <span style={{ ...styles.value, color: fiiNum >= 0 ? GREEN : RED }}>
-                                    ₹{fiiNum >= 0 ? '+' : ''}{formatNum(data.fiiActivity)} Cr
-                                </span>
-                                <span style={{
-                                    ...styles.tag, marginLeft: '8px', fontSize: '9px',
-                                    background: fiiNum >= 0 ? `${GREEN}15` : `${RED}15`,
-                                    color: fiiNum >= 0 ? GREEN : RED,
-                                }}>
-                                    {fiiNum >= 0 ? 'BUYING' : 'SELLING'}
-                                </span>
+                    {/* FII / DII */}
+                    <div className="noa-card-n" style={{ padding: '22px' }}>
+                        <div style={{ fontSize: '9px', letterSpacing: '.22em', color: '#334155', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '7px' }}>
+                            <span style={{ display: 'inline-block', width: '3px', height: '14px', background: `linear-gradient(${YELLOW},#f59e0b)`, borderRadius: '2px' }} />
+                            FII / DII ACTIVITY
+                        </div>
+                        <div className="noa-data-row" style={{ borderBottom: `1px solid ${BORDER}` }}>
+                            <span style={{ fontSize: '11px', color: '#475569' }}>FII Net</span>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                <span style={{ fontSize: '13px', fontWeight: '700', color: fiiNum >= 0 ? GREEN : RED }}>₹{fiiNum >= 0 ? '+' : ''}{formatNum(data.fiiActivity)} Cr</span>
+                                <span className="noa-pill" style={{ background: fiiNum >= 0 ? `${GREEN}12` : `${RED}12`, color: fiiNum >= 0 ? GREEN : RED }}>{fiiNum >= 0 ? 'BUYING' : 'SELLING'}</span>
                             </div>
                         </div>
-                        <div style={styles.dataRow}>
-                            <span style={styles.label}>DII Net</span>
-                            <span style={{ ...styles.value, color: parseFloat(data.diiActivity) >= 0 ? GREEN : RED }}>
-                                ₹{parseFloat(data.diiActivity) >= 0 ? '+' : ''}{formatNum(data.diiActivity)} Cr
-                            </span>
+                        <div className="noa-data-row">
+                            <span style={{ fontSize: '11px', color: '#475569' }}>DII Net</span>
+                            <span style={{ fontSize: '13px', fontWeight: '700', color: diiNum >= 0 ? GREEN : RED }}>₹{diiNum >= 0 ? '+' : ''}{formatNum(data.diiActivity)} Cr</span>
                         </div>
-                        <div style={{ marginTop: '10px' }}>
-                            <div style={{ fontSize: '10px', color: '#475569', marginBottom: '5px' }}>NET SENTIMENT</div>
-                            <div style={styles.sentimentBar}>
-                                <div style={{
-                                    height: '100%',
-                                    width: fiiNum >= 0 ? '65%' : '35%',
-                                    background: fiiNum >= 0
-                                        ? `linear-gradient(90deg, ${GREEN}, #00c97a)`
-                                        : `linear-gradient(90deg, ${RED}, #ff6b6b)`,
-                                    borderRadius: '3px',
-                                    transition: 'width 0.8s ease',
-                                }} />
+                        <div style={{ marginTop: '14px' }}>
+                            <div style={{ fontSize: '9px', color: '#2d4258', letterSpacing: '.15em', marginBottom: '6px' }}>NET INSTITUTIONAL SENTIMENT</div>
+                            <div style={{ height: '6px', borderRadius: '3px', background: '#0a1624', overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: fiiNum >= 0 ? '65%' : '35%', background: fiiNum >= 0 ? `linear-gradient(90deg,${GREEN},#00c47a)` : `linear-gradient(90deg,${RED},#ff6b6b)`, borderRadius: '3px', transition: 'width 1s ease' }} />
                             </div>
                         </div>
                     </div>
 
                     {/* Global Cues */}
-                    <div style={styles.card}>
-                        <div style={styles.cardTitle}>🌍 GLOBAL CUES</div>
-                        <div style={styles.dataRow}>
-                            <span style={styles.label}>US Markets</span>
-                            <span style={{ ...styles.value, color: parseFloat(data.usMarket) >= 0 ? GREEN : RED }}>
-                                {parseFloat(data.usMarket) >= 0 ? '+' : ''}{data.usMarket}%
-                            </span>
+                    <div className="noa-card-n" style={{ padding: '22px' }}>
+                        <div style={{ fontSize: '9px', letterSpacing: '.22em', color: '#334155', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '7px' }}>
+                            <span style={{ display: 'inline-block', width: '3px', height: '14px', background: `linear-gradient(${BLUE},#0ea5e9)`, borderRadius: '2px' }} />
+                            GLOBAL CUES
                         </div>
-                        <div style={styles.dataRow}>
-                            <span style={styles.label}>Crude Oil (WTI)</span>
-                            <span style={styles.value}>${data.crude}/bbl</span>
+                        <div className="noa-data-row" style={{ borderBottom: `1px solid ${BORDER}` }}>
+                            <span style={{ fontSize: '11px', color: '#475569' }}>US Markets (O/N)</span>
+                            <span style={{ fontSize: '13px', fontWeight: '700', color: parseFloat(data.usMarket) >= 0 ? GREEN : RED }}>{parseFloat(data.usMarket) >= 0 ? '+' : ''}{data.usMarket}%</span>
                         </div>
-                        <div style={styles.dataRow}>
-                            <span style={styles.label}>Dollar Index (DXY)</span>
-                            <span style={{ ...styles.value, color: parseFloat(data.dollarIndex) > 104 ? RED : GREEN }}>
-                                {data.dollarIndex}
-                            </span>
+                        <div className="noa-data-row" style={{ borderBottom: `1px solid ${BORDER}` }}>
+                            <span style={{ fontSize: '11px', color: '#475569' }}>Crude Oil (WTI)</span>
+                            <span style={{ fontSize: '13px', fontWeight: '600', color: '#e2e8f0' }}>${data.crude}<span style={{ color: '#475569', fontSize: '10px' }}>/bbl</span></span>
                         </div>
-                        <div style={styles.dataRow}>
-                            <span style={styles.label}>Events Today</span>
-                            <span style={{ ...styles.value, fontSize: '11px', color: YELLOW }}>{data.majorEvents}</span>
+                        <div className="noa-data-row" style={{ borderBottom: `1px solid ${BORDER}` }}>
+                            <span style={{ fontSize: '11px', color: '#475569' }}>Dollar Index (DXY)</span>
+                            <span style={{ fontSize: '13px', fontWeight: '700', color: parseFloat(data.dollarIndex) > 104 ? RED : GREEN }}>{data.dollarIndex}</span>
+                        </div>
+                        <div className="noa-data-row">
+                            <span style={{ fontSize: '11px', color: '#475569' }}>Events Today</span>
+                            <span style={{ fontSize: '11px', fontWeight: '600', color: YELLOW, maxWidth: '180px', textAlign: 'right' }}>{data.majorEvents}</span>
                         </div>
                     </div>
                 </div>
 
-                {/* MANUAL INPUT SECTION */}
-                <div style={styles.card}>
-                    <div style={styles.sectionTitle}>⚙️ EDIT MARKET DATA</div>
-                    <div style={styles.alertBox}>
-                        ⚠️ Auto-fetch shows estimated/placeholder data. Please verify with{' '}
-                        <a href="https://www.nseindia.com" target="_blank" rel="noopener noreferrer"
-                            style={{ color: YELLOW, textDecoration: 'underline' }}>NSE</a>{' '}
-                        /{' '}
-                        <a href="https://kite.zerodha.com" target="_blank" rel="noopener noreferrer"
-                            style={{ color: YELLOW, textDecoration: 'underline' }}>Zerodha</a>{' '}
-                        /{' '}
-                        <a href="https://sensibull.com" target="_blank" rel="noopener noreferrer"
-                            style={{ color: YELLOW, textDecoration: 'underline' }}>Sensibull</a>{' '}
-                        before trading. Edit fields below to match live market.
+                {/* ── EDIT MARKET DATA ──────────────────────────────────── */}
+                <div className="noa-card-n" style={{ padding: '24px', marginBottom: '16px' }}>
+                    {/* Section header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingBottom: '14px', borderBottom: `1px solid ${BORDER}` }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ fontSize: '14px' }}>⚙️</span>
+                            <span style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8', letterSpacing: '.18em', textTransform: 'uppercase' }}>Edit Market Data</span>
+                        </div>
+                        <div style={{ fontSize: '10px', color: '#ffd16680', background: `${YELLOW}10`, border: `1px solid ${YELLOW}25`, borderRadius: '6px', padding: '5px 12px', lineHeight: 1.6 }}>
+                            ⚠️ Verify with{' '}
+                            <a href="https://www.nseindia.com" target="_blank" rel="noopener noreferrer" style={{ color: YELLOW }}>NSE</a> /{' '}
+                            <a href="https://kite.zerodha.com" target="_blank" rel="noopener noreferrer" style={{ color: YELLOW }}>Zerodha</a> before trading
+                        </div>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+                    {/* Numeric inputs */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '14px', marginBottom: '14px' }}>
                         {([
-                            { key: 'niftyClose', label: 'Nifty Prev Close', hint: 'From NSE or Zerodha' },
-                            { key: 'bankniftyClose', label: 'Bank Nifty Prev Close', hint: 'From NSE or Zerodha' },
+                            { key: 'niftyClose', label: 'Nifty Prev Close', hint: 'From NSE / Zerodha' },
+                            { key: 'bankniftyClose', label: 'Bank Nifty Prev Close', hint: 'From NSE / Zerodha' },
                             { key: 'giftNifty', label: 'Gift Nifty', hint: 'Pre-market from NSE Indices' },
                             { key: 'vix', label: 'India VIX', hint: 'From NSE VIX page' },
-                            { key: 'fiiActivity', label: 'FII Activity (₹ Cr)', hint: 'Negative = selling, from NSE FII/DII page' },
+                            { key: 'fiiActivity', label: 'FII Activity (₹ Cr)', hint: 'Negative = selling' },
                             { key: 'diiActivity', label: 'DII Activity (₹ Cr)', hint: 'Positive = buying' },
                             { key: 'crude', label: 'Crude Oil ($)', hint: 'WTI from investing.com' },
                             { key: 'dollarIndex', label: 'Dollar Index (DXY)', hint: 'From investing.com' },
                         ] as Array<{ key: keyof MarketData; label: string; hint: string }>).map(({ key, label, hint }) => (
-                            <div key={key} style={styles.inputGroup}>
-                                <label style={styles.inputLabel} title={hint}>{label}</label>
-                                <input
-                                    className="noa-input"
-                                    style={styles.input}
-                                    value={data[key]}
-                                    onChange={(e) => handleChange(key, e.target.value)}
-                                    placeholder={hint}
-                                />
+                            <div key={key}>
+                                <label style={S.label} title={hint}>{label}</label>
+                                <input className="noa-input" style={S.input} value={data[key]} onChange={e => handleChange(key, e.target.value)} placeholder={hint} />
                             </div>
                         ))}
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '12px' }}>
-                        <div style={styles.inputGroup}>
-                            <label style={styles.inputLabel}>Major Events / News Today</label>
-                            <input
-                                className="noa-input"
-                                style={styles.input}
-                                value={data.majorEvents}
-                                onChange={(e) => handleChange('majorEvents', e.target.value)}
-                                placeholder="e.g., RBI Policy, Q3 Results, Weekly Expiry..."
-                            />
+                    {/* Text / select row */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '14px' }}>
+                        <div>
+                            <label style={S.label}>Major Events / News Today</label>
+                            <input className="noa-input" style={S.input} value={data.majorEvents} onChange={e => handleChange('majorEvents', e.target.value)} placeholder="e.g., RBI Policy, Weekly Expiry, Q3 Results..." />
                         </div>
-                        <div style={styles.inputGroup}>
-                            <label style={styles.inputLabel}>US Markets % Change</label>
-                            <input
-                                className="noa-input"
-                                style={styles.input}
-                                value={data.usMarket}
-                                onChange={(e) => handleChange('usMarket', e.target.value)}
-                                placeholder="+0.5 or -1.2"
-                            />
+                        <div>
+                            <label style={S.label}>US Markets % Change</label>
+                            <input className="noa-input" style={S.input} value={data.usMarket} onChange={e => handleChange('usMarket', e.target.value)} placeholder="+0.5 or -1.2" />
                         </div>
-                        <div style={styles.inputGroup}>
-                            <label style={styles.inputLabel}>Max Risk % / Trade</label>
-                            <input
-                                className="noa-input"
-                                style={styles.input}
-                                value={data.capitalRisk}
-                                onChange={(e) => handleChange('capitalRisk', e.target.value)}
-                                placeholder="2"
-                            />
+                        <div>
+                            <label style={S.label}>Max Risk % / Trade</label>
+                            <input className="noa-input" style={S.input} value={data.capitalRisk} onChange={e => handleChange('capitalRisk', e.target.value)} placeholder="2" />
                         </div>
-                        <div style={styles.inputGroup}>
-                            <label style={styles.inputLabel}>Trader Level</label>
-                            <select
-                                className="noa-input"
-                                style={styles.select}
-                                value={data.traderExperience}
-                                onChange={(e) => handleChange('traderExperience', e.target.value)}
-                            >
+                        <div>
+                            <label style={S.label}>Trader Level</label>
+                            <select className="noa-input" style={S.select} value={data.traderExperience} onChange={e => handleChange('traderExperience', e.target.value)}>
                                 <option>Beginner</option>
                                 <option>Intermediate</option>
                                 <option>Advanced</option>
@@ -750,62 +557,109 @@ export default function NiftyOptionsAnalyzerPage() {
                             </select>
                         </div>
                     </div>
+                </div>
 
-                    {/* Analysis Type & Buttons */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '8px', flexWrap: 'wrap' }}>
-                        <div style={styles.inputGroup}>
-                            <label style={styles.inputLabel}>Analysis Type</label>
-                            <div style={{ display: 'flex', gap: '8px' }}>
+                {/* ── ANALYSIS CONTROLS ─────────────────────────────────── */}
+                <div className="noa-card-n" style={{ padding: '24px', marginBottom: '16px' }}>
+                    <div style={{ fontSize: '9px', letterSpacing: '.22em', color: '#334155', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '7px' }}>
+                        <span style={{ display: 'inline-block', width: '3px', height: '14px', background: `linear-gradient(${ACCENT},#00c47a)`, borderRadius: '2px' }} />
+                        ANALYSIS TYPE
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                        {/* Quick */}
+                        <button
+                            className="noa-type-btn"
+                            onClick={() => setAnalysisType('quick')}
+                            style={{
+                                color: analysisType === 'quick' ? ACCENT : '#475569',
+                                borderColor: analysisType === 'quick' ? `${ACCENT}60` : BORDER,
+                                background: analysisType === 'quick' ? `${ACCENT}10` : 'transparent',
+                                minWidth: '120px',
+                            }}
+                            title="Fast 150-word market summary"
+                        >
+                            <span style={{ fontSize: '18px' }}>⚡</span>
+                            <span>Quick</span>
+                            <span style={{ fontSize: '9px', color: analysisType === 'quick' ? `${ACCENT}80` : '#2d4258' }}>150-word summary</span>
+                        </button>
+
+                        {/* Full Report */}
+                        {(() => {
+                            const locked = usage !== null && !usage?.allowed_types?.includes('full')
+                            return (
                                 <button
-                                    className="noa-btn"
-                                    onClick={() => setAnalysisType('quick')}
+                                    className="noa-type-btn"
+                                    onClick={() => !locked && setAnalysisType('full')}
+                                    disabled={locked}
                                     style={{
-                                        ...styles.btnSecondary,
-                                        background: analysisType === 'quick' ? `${ACCENT}20` : 'transparent',
-                                        borderColor: analysisType === 'quick' ? ACCENT : `${ACCENT}30`,
-                                        color: analysisType === 'quick' ? ACCENT : '#64748b',
+                                        color: locked ? '#2d4258' : analysisType === 'full' ? ACCENT : '#475569',
+                                        borderColor: locked ? BORDER : analysisType === 'full' ? `${ACCENT}60` : BORDER,
+                                        background: analysisType === 'full' ? `${ACCENT}10` : 'transparent',
+                                        minWidth: '120px',
                                     }}
-                                    title="Uses claude-haiku — 3× cheaper, 150-word fast result"
+                                    title={locked ? '🔒 Pro plan required' : 'Full 7-section trade plan'}
                                 >
-                                    ⚡ Quick
-                                    <span style={{ fontSize: '9px', marginLeft: '4px', opacity: 0.7 }}>Haiku·~₹0.01</span>
+                                    <span style={{ fontSize: '18px' }}>{locked ? '🔒' : '📊'}</span>
+                                    <span>Full Report</span>
+                                    <span style={{ fontSize: '9px', color: locked ? '#1e2c3a' : analysisType === 'full' ? `${ACCENT}80` : '#2d4258' }}>{locked ? 'Pro plan' : '7-section plan'}</span>
                                 </button>
-                                <button
-                                    className="noa-btn"
-                                    onClick={() => setAnalysisType('full')}
-                                    style={{
-                                        ...styles.btnSecondary,
-                                        background: analysisType === 'full' ? `${ACCENT}20` : 'transparent',
-                                        borderColor: analysisType === 'full' ? ACCENT : `${ACCENT}30`,
-                                        color: analysisType === 'full' ? ACCENT : '#64748b',
-                                    }}
-                                    title="Uses claude-sonnet — full 7-section trade plan with prompt caching"
-                                >
-                                    📊 Full Report
-                                    <span style={{ fontSize: '9px', marginLeft: '4px', opacity: 0.7 }}>Sonnet·~₹0.10</span>
-                                </button>
+                            )
+                        })()}
+
+                        {/* Advanced — elite only */}
+                        {usage?.allowed_types?.includes('advanced') && (
+                            <button
+                                className="noa-type-btn"
+                                onClick={() => setAnalysisType('advanced')}
+                                style={{
+                                    color: analysisType === 'advanced' ? YELLOW : '#475569',
+                                    borderColor: analysisType === 'advanced' ? `${YELLOW}60` : BORDER,
+                                    background: analysisType === 'advanced' ? `${YELLOW}10` : 'transparent',
+                                    minWidth: '120px',
+                                }}
+                                title="Advanced deep-dive analysis (Elite)"
+                            >
+                                <span style={{ fontSize: '18px' }}>🔬</span>
+                                <span>Advanced</span>
+                                <span style={{ fontSize: '9px', color: analysisType === 'advanced' ? `${YELLOW}80` : '#2d4258' }}>Elite only</span>
+                            </button>
+                        )}
+
+                        {/* Divider + session selector */}
+                        <div style={{ marginLeft: '8px', paddingLeft: '18px', borderLeft: `1px solid ${BORDER}`, alignSelf: 'stretch', display: 'flex', alignItems: 'center' }}>
+                            <div>
+                                <label style={S.label}>Session</label>
+                                <select className="noa-input" style={{ ...S.select, width: '130px' }} value={data.sessionType} onChange={e => handleChange('sessionType', e.target.value)}>
+                                    <option>Intraday</option>
+                                    <option>Positional</option>
+                                    <option>Expiry Day</option>
+                                </select>
                             </div>
                         </div>
 
-                        <div style={{ display: 'flex', gap: '10px', marginLeft: 'auto' }}>
-                            <button className="noa-btn" style={styles.btnSecondary} onClick={fetchLiveData} disabled={fetching}>
-                                {fetching ? '⟳ Refreshing...' : '⟳ Refresh Data'}
-                            </button>
+                        {/* Analyze button */}
+                        <div style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+                            {cooldownSecsLeft > 0 && (
+                                <div style={{ fontSize: '10px', color: YELLOW, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span style={{ animation: 'pulse 1s infinite' }}>⏳</span>
+                                    Next analysis in <strong>{cooldownSecsLeft}s</strong>
+                                    {usage && <span style={{ color: '#334155' }}> · Free tier cooldown</span>}
+                                </div>
+                            )}
                             <button
-                                className="noa-btn"
-                                style={{
-                                    ...styles.btn,
-                                    opacity: loading ? 0.7 : 1,
-                                    cursor: loading ? 'not-allowed' : 'pointer',
-                                }}
+                                className="noa-btn-primary"
+                                style={{ padding: '14px 36px', fontSize: '13px', letterSpacing: '0.12em', boxShadow: loading || cooldownSecsLeft > 0 ? 'none' : `0 0 28px ${ACCENT}30, 0 4px 16px #00000050` }}
                                 onClick={analyzeWithAI}
-                                disabled={loading}
+                                disabled={loading || cooldownSecsLeft > 0}
                             >
                                 {loading ? (
                                     <>
-                                        <div style={{ ...styles.spinner, animation: 'spin 0.8s linear infinite' }} />
-                                        Analyzing...
+                                        <span className="noa-spin" style={{ display: 'inline-block', width: '15px', height: '15px', border: `2px solid #03100a50`, borderTop: `2px solid #030810`, borderRadius: '50%' }} />
+                                        Analyzing Market...
                                     </>
+                                ) : cooldownSecsLeft > 0 ? (
+                                    <>⏳ Wait {cooldownSecsLeft}s</>
                                 ) : (
                                     <><span>🤖</span> Analyze with AI</>
                                 )}
@@ -814,78 +668,75 @@ export default function NiftyOptionsAnalyzerPage() {
                     </div>
                 </div>
 
-                {/* AI RESPONSE */}
+                {/* ── AI RESPONSE ───────────────────────────────────────── */}
                 {(aiResponse || loading || error) && (
-                    <div style={{ ...styles.card, marginTop: '16px' }}>
-                        <div style={styles.sectionTitle}>🤖 AI INTRADAY ANALYSIS</div>
-                        {loading && (
-                            <div style={styles.loading}>
-                                <div style={{ ...styles.spinner, animation: 'spin 0.8s linear infinite' }} />
-                                <span>Claude is analyzing market data...</span>
-                            </div>
-                        )}
-                        {error && (
-                            <div style={{
-                                color: RED, fontSize: '13px', padding: '10px',
-                                background: `${RED}10`, borderRadius: '6px', border: `1px solid ${RED}30`,
-                            }}>
-                                ⚠️ {error}
-                            </div>
-                        )}
-                        {aiResponse && (
-                            <div style={styles.aiResponse} className="ai-out">
-                                {renderMarkdown(aiResponse)}
-                            </div>
-                        )}
-                        {aiResponse && (
-                            <>
-                                {/* Token & cost summary */}
-                                {tokensUsed && (
-                                    <div style={{
-                                        display: 'flex', gap: '10px', flexWrap: 'wrap',
-                                        marginTop: '12px', padding: '10px 14px',
-                                        background: '#0a1525', border: `1px solid ${BORDER}`,
-                                        borderRadius: '8px', fontSize: '10px', color: '#475569',
-                                        letterSpacing: '0.05em',
-                                    }}>
-                                        <span style={{ color: ACCENT }}>📊 USAGE</span>
-                                        <span>Model: <strong style={{ color: '#94a3b8' }}>{tokensUsed.model}</strong></span>
-                                        <span>In: <strong style={{ color: '#94a3b8' }}>{tokensUsed.inputTokens.toLocaleString()}</strong></span>
-                                        <span>Out: <strong style={{ color: '#94a3b8' }}>{tokensUsed.outputTokens.toLocaleString()}</strong></span>
-                                        {tokensUsed.cacheReadTokens > 0 && (
-                                            <span style={{ color: GREEN }}>⚡ Cache hit: <strong>{tokensUsed.cacheReadTokens.toLocaleString()}</strong> tokens (90% saved)</span>
-                                        )}
-                                        {tokensUsed.cacheWriteTokens > 0 && (
-                                            <span style={{ color: YELLOW }}>💾 Cache write: <strong>{tokensUsed.cacheWriteTokens.toLocaleString()}</strong></span>
-                                        )}
-                                        <span style={{ marginLeft: 'auto', color: GREEN }}>Cost: <strong>~₹{(tokensUsed.estimatedCostUSD * USD_TO_INR).toFixed(3)}</strong> (${tokensUsed.estimatedCostUSD.toFixed(5)})</span>
-                                    </div>
+                    <div className="noa-card-g" style={{ padding: '0', marginBottom: '16px', overflow: 'hidden' }}>
+                        {/* Response header bar */}
+                        <div style={{ padding: '14px 22px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#060e17' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <span style={{ fontSize: '15px' }}>🤖</span>
+                                <span style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8', letterSpacing: '.15em' }}>AI INTRADAY ANALYSIS</span>
+                                {analysisType && (
+                                    <span className="noa-pill" style={{ background: `${ACCENT}15`, color: ACCENT }}>
+                                        {analysisType === 'quick' ? '⚡ QUICK' : analysisType === 'full' ? '📊 FULL REPORT' : '🔬 ADVANCED'}
+                                    </span>
                                 )}
-                                <div style={{ marginTop: '10px', display: 'flex', gap: '10px' }}>
-                                    <button
-                                        className="noa-btn"
-                                        style={styles.btnSecondary}
-                                        onClick={() => navigator.clipboard.writeText(aiResponse)}
-                                    >
-                                        📋 Copy Analysis
+                            </div>
+                            {aiResponse && (
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button className="noa-btn-outline" style={{ padding: '5px 14px', fontSize: '10px' }} onClick={() => navigator.clipboard.writeText(aiResponse)}>
+                                        📋 Copy
                                     </button>
-                                    <button className="noa-btn" style={styles.btnSecondary} onClick={() => { setAiResponse(''); setTokensUsed(null) }}>
-                                        🗑️ Clear
+                                    <button className="noa-btn-outline" style={{ padding: '5px 14px', fontSize: '10px', borderColor: `${RED}40`, color: RED }} onClick={() => { setAiResponse(''); setTokensUsed(null) }}>
+                                        ✕ Clear
                                     </button>
                                 </div>
-                            </>
-                        )}
+                            )}
+                        </div>
+
+                        <div style={{ padding: '22px' }}>
+                            {loading && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: ACCENT, fontSize: '13px' }}>
+                                    <span className="noa-spin" style={{ display: 'inline-block', width: '18px', height: '18px', border: `2px solid ${ACCENT}25`, borderTop: `2px solid ${ACCENT}`, borderRadius: '50%' }} />
+                                    <span>Analyzing market conditions with AI</span>
+                                    <span style={{ color: '#2d4258', animation: 'pulse 1.5s infinite' }}>●●●</span>
+                                </div>
+                            )}
+                            {error && (
+                                <div style={{ color: RED, fontSize: '13px', padding: '12px 16px', background: `${RED}08`, borderRadius: '8px', border: `1px solid ${RED}25`, lineHeight: 1.7 }}>
+                                    ⚠️ {error}
+                                </div>
+                            )}
+                            {aiResponse && (
+                                <div className="ai-out" style={{ background: '#040c14', border: `1px solid ${BORDER}`, borderRadius: '10px', padding: '22px', fontSize: '13px', lineHeight: '1.85', color: '#cbd5e1' }}>
+                                    {renderMarkdown(aiResponse)}
+                                </div>
+                            )}
+
+                            {/* Token usage chip */}
+                            {aiResponse && tokensUsed && (
+                                <div style={{ marginTop: '14px', padding: '10px 16px', background: '#020810', border: `1px solid ${BORDER}`, borderRadius: '8px', display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '10px', color: '#334155', alignItems: 'center', letterSpacing: '.04em' }}>
+                                    <span style={{ color: ACCENT, fontWeight: '700' }}>📊 USAGE</span>
+                                    <span>In <strong style={{ color: '#64748b' }}>{tokensUsed.inputTokens.toLocaleString()}</strong></span>
+                                    <span>Out <strong style={{ color: '#64748b' }}>{tokensUsed.outputTokens.toLocaleString()}</strong></span>
+                                    {tokensUsed.cacheReadTokens > 0 && (
+                                        <span style={{ color: GREEN }}>⚡ Cache hit <strong>{tokensUsed.cacheReadTokens.toLocaleString()}</strong> tokens</span>
+                                    )}
+                                    {tokensUsed.cacheWriteTokens > 0 && (
+                                        <span style={{ color: YELLOW }}>💾 Wrote <strong>{tokensUsed.cacheWriteTokens.toLocaleString()}</strong></span>
+                                    )}
+                                    <span style={{ marginLeft: 'auto', color: GREEN, fontWeight: '700' }}>~₹{tokensUsed.costInr.toFixed(3)}</span>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
 
-                {/* DISCLAIMER */}
-                <div style={{
-                    textAlign: 'center', padding: '20px', fontSize: '10px',
-                    color: '#f4937a', letterSpacing: '0.05em', lineHeight: '1.8',
-                }}>
-                    ⚠️ DISCLAIMER: This tool is for EDUCATIONAL purposes only. Not SEBI registered advice.
+                {/* ── DISCLAIMER ────────────────────────────────────────── */}
+                <div style={{ textAlign: 'center', padding: '18px', fontSize: '10px', color: '#c05a4580', letterSpacing: '.05em', lineHeight: '1.9' }}>
+                    ⚠️ DISCLAIMER: This tool is for EDUCATIONAL purposes only. Not SEBI registered financial advice.
                     <br />
-                    Options trading involves significant risk. Always use proper risk management. Verify all data before trading.
+                    Options trading involves significant risk of loss. Always verify data and use proper risk management before trading.
                 </div>
             </div>
         </div>

@@ -39,10 +39,20 @@ class UserModel(Base):
     razorpay_subscription_id = Column(String(255), nullable=True)
     razorpay_customer_id = Column(String(255), nullable=True)
 
+    # Options Analyzer fields
+    options_tier = Column(String(20), default="free", nullable=False, server_default="free")
+    options_starter_payment_id = Column(String(100), nullable=True, unique=True)  # Razorpay pay_ID used for Starter activation — prevents reuse
+    options_credits = Column(Integer, default=5, nullable=False, server_default="5")
+    options_analyses_today = Column(Integer, default=0, nullable=False, server_default="0")
+    options_analyses_date = Column(String(10), nullable=True)   # YYYY-MM-DD
+    options_ai_cost_month = Column(Numeric(10, 4), default=Decimal("0"), nullable=False, server_default="0")
+    options_ai_cost_month_key = Column(String(7), nullable=True)  # YYYY-MM
+
     # Relationships
     portfolios = relationship("PortfolioModel", back_populates="owner", cascade="all, delete-orphan")
     password_reset_tokens = relationship("PasswordResetTokenModel", back_populates="user", cascade="all, delete-orphan")
     export_logs = relationship("ExportLogModel", back_populates="user", cascade="all, delete-orphan")
+    options_analysis_logs = relationship("OptionsAnalysisLogModel", back_populates="user", cascade="all, delete-orphan")
 
 
 class PasswordResetTokenModel(Base):
@@ -216,6 +226,28 @@ class ExportLogModel(Base):
 
     __table_args__ = (
         Index('ix_export_logs_user_month', 'user_id', 'created_at'),
+    )
+
+
+class OptionsAnalysisLogModel(Base):
+    """Audit log for every Options Analyzer AI call. Never stores prompt content."""
+
+    __tablename__ = "options_analysis_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    tier = Column(String(20), nullable=False)
+    analysis_type = Column(String(20), nullable=False)  # quick | full | advanced
+    input_tokens = Column(Integer, default=0, nullable=False)
+    output_tokens = Column(Integer, default=0, nullable=False)
+    cache_read_tokens = Column(Integer, default=0, nullable=False)
+    ai_cost_inr = Column(Numeric(10, 4), default=Decimal("0"), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    user = relationship("UserModel", back_populates="options_analysis_logs")
+
+    __table_args__ = (
+        Index('ix_options_logs_user_id', 'user_id'),
     )
 
 

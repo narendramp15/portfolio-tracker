@@ -13,6 +13,7 @@ const baseNav = [
   { to: '/app/brokers', label: 'Brokers', icon: Link2 },
   { to: '/app/settings', label: 'Settings', icon: Settings },
   { to: '/app/options-analyzer', label: 'Options Analyzer', icon: Zap },
+  { to: '/app/options-billing', label: 'Options Plans', icon: Crown },
 ]
 
 export function Sidebar() {

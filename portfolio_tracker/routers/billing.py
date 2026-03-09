@@ -299,3 +299,240 @@ def cancel_subscription(
         "success": True,
         "message": "Subscription cancelled. Pro access continues until the end of your billing period.",
     }
+
+
+# ─── Options Analyzer tier upgrade ───────────────────────────────────────────
+
+_OPTIONS_TIERS = ("starter", "pro", "elite")
+_OPTIONS_TIER_LABELS = {"starter": "Starter", "pro": "Pro", "elite": "Elite"}
+
+RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
+
+# Starter plan payment link (static Razorpay payment link shared with users)
+STARTER_PAYMENT_LINK = os.getenv("RAZORPAY_STARTER_PAYMENT_LINK", "https://rzp.io/rzp/y3LwB3p")
+# The Razorpay Payment Link ID (plink_XXXXXXXX) for the Starter plan.
+# Set this to enforce that the payment came from YOUR specific payment link,
+# not just any ₹99 payment in your account.
+# Find it: Razorpay Dashboard → Payment Links → copy the ID from the link URL/details.
+STARTER_LINK_ID = os.getenv("RAZORPAY_STARTER_LINK_ID", "")  # e.g. plink_XXXXXXXXXXXXXXXX
+STARTER_PRICE_PAISE = 9900  # ₹99 × 100
+
+# Credit pack definitions: id → (credits, price_paise)
+_CREDIT_PACKS: dict[str, tuple[int, int]] = {
+    "starter_pack": (10, 9900),
+    "growth_pack": (40, 29900),
+    "power_pack": (120, 74900),
+}
+
+
+@router.post("/options-upgrade")
+def options_upgrade(
+    payload: dict,
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Immediately upgrades the user's options_tier (no payment — billing handled
+    via Razorpay recurring outside this flow, or as a simple admin override).
+    For production, integrate a real payment check before applying.
+    """
+    target_tier: str = payload.get("tier", "")
+    if target_tier not in _OPTIONS_TIERS:
+        raise HTTPException(status_code=400, detail=f"Invalid tier '{target_tier}'. Must be one of {_OPTIONS_TIERS}.")
+
+    current_idx = _OPTIONS_TIERS.index(getattr(user, "options_tier", "starter"))
+    target_idx = _OPTIONS_TIERS.index(target_tier)
+    if target_idx <= current_idx:
+        raise HTTPException(status_code=400, detail="Cannot downgrade tier via this endpoint.")
+
+    user.options_tier = target_tier  # type: ignore[assignment]
+    db.commit()
+    db.refresh(user)
+    logger.info("User %d upgraded options tier to %s", user.id, target_tier)
+    return {"success": True, "tier": target_tier, "tier_label": _OPTIONS_TIER_LABELS[target_tier]}
+
+
+@router.get("/options-starter-link")
+def get_starter_payment_link(
+    user: UserModel = Depends(get_current_user),
+) -> dict:
+    """Return the Starter plan payment link so the frontend can open it."""
+    return {"payment_link": STARTER_PAYMENT_LINK, "price_inr": 99}
+
+
+@router.post("/options-starter-activate")
+def options_starter_activate(
+    payload: dict,
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Verifies a Razorpay payment for the Starter plan and upgrades the user.
+
+    Flow:
+      1. User opens the shared Razorpay payment link (STARTER_PAYMENT_LINK) in their browser.
+      2. After paying, the user copies their Payment ID (starts with 'pay_') from the
+         Razorpay confirmation screen or email.
+      3. Frontend POSTs that payment_id here for server-side verification via the
+         Razorpay fetch-payment API.
+      4. If the payment is captured and the amount is ≥ ₹99, the user's options_tier
+         is set to 'starter'.
+    """
+    payment_id: str = payload.get("payment_id", "").strip()
+    if not payment_id or not payment_id.startswith("pay_"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid Payment ID. It must start with 'pay_' — find it in your Razorpay confirmation email.",
+        )
+
+    if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
+        raise HTTPException(
+            status_code=503,
+            detail="Payment verification is not configured on the server. Contact support.",
+        )
+
+    # ── Security check 1: Prevent reuse of the same payment ID across accounts ──
+    # DB-level UNIQUE constraint is the backstop, but we check here first for a
+    # cleaner error message.
+    existing = db.query(UserModel).filter(UserModel.options_starter_payment_id == payment_id).first()
+    if existing is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="This Payment ID has already been used to activate an account. Each payment can only activate one account.",
+        )
+
+    try:
+        import razorpay  # type: ignore[import]
+        client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+        payment = client.payment.fetch(payment_id)
+    except Exception as exc:
+        logger.error("Razorpay payment fetch failed for %s: %s", payment_id, exc)
+        raise HTTPException(
+            status_code=502,
+            detail="Could not verify payment with payment gateway. Please try again.",
+        ) from exc
+
+    if payment.get("status") != "captured":
+        raise HTTPException(
+            status_code=400,
+            detail="Payment is not yet captured. Please wait a few seconds and try again.",
+        )
+    if payment.get("amount", 0) < STARTER_PRICE_PAISE:
+        raise HTTPException(
+            status_code=400,
+            detail="Payment amount does not match the Starter plan price (₹99).",
+        )
+    if payment.get("currency", "INR") != "INR":
+        raise HTTPException(status_code=400, detail="Payment currency must be INR.")
+
+    # ── Security check 2: Verify payment came from our specific payment link ──
+    # Razorpay sets 'payment_link_id' on payments made via a Payment Link.
+    # If RAZORPAY_STARTER_LINK_ID is configured, reject payments from other sources.
+    if STARTER_LINK_ID:
+        payment_link_id = payment.get("payment_link_id") or ""
+        if payment_link_id != STARTER_LINK_ID:
+            logger.warning(
+                "Payment %s has payment_link_id=%r, expected %r — rejecting",
+                payment_id, payment_link_id, STARTER_LINK_ID,
+            )
+            raise HTTPException(
+                status_code=400,
+                detail="Payment was not made via the official Starter plan link. Please use the link on the billing page.",
+            )
+
+    # ── Activate starter tier and record the payment ID ──
+    user.options_tier = "starter"  # type: ignore[assignment]
+    user.options_starter_payment_id = payment_id  # type: ignore[assignment]  — prevents reuse
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        # Most likely a race-condition duplicate (UNIQUE violation on options_starter_payment_id)
+        raise HTTPException(
+            status_code=409,
+            detail="This Payment ID has already been used to activate another account.",
+        )
+    db.refresh(user)
+    logger.info("User %d activated Starter tier via payment %s", user.id, payment_id)
+    return {"success": True, "tier": "starter", "tier_label": "Starter"}
+
+
+@router.post("/options-credits")
+def buy_options_credits(
+    payload: dict,
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Creates a Razorpay order for a credit pack purchase.
+    If Razorpay is not configured, credits are added directly (dev/test mode).
+    """
+    pack_id: str = payload.get("pack_id", "")
+    if pack_id not in _CREDIT_PACKS:
+        raise HTTPException(status_code=400, detail=f"Unknown pack '{pack_id}'.")
+
+    credits_to_add, price_paise = _CREDIT_PACKS[pack_id]
+
+    if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
+        # Dev mode — add credits directly without payment
+        user.options_credits = (getattr(user, "options_credits", 0) or 0) + credits_to_add  # type: ignore[assignment]
+        db.commit()
+        logger.info("Dev mode: added %d credits to user %d", credits_to_add, user.id)
+        return {"credits_added": credits_to_add, "dev_mode": True}
+
+    try:
+        import razorpay  # type: ignore[import]
+        client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+        order = client.order.create({
+            "amount": price_paise,
+            "currency": "INR",
+            "receipt": f"opt_credits_{user.id}_{pack_id}",
+            "notes": {"user_id": str(user.id), "pack_id": pack_id, "credits": str(credits_to_add)},
+        })
+        return {
+            "razorpay_order_id": order["id"],
+            "razorpay_key": RAZORPAY_KEY_ID,
+            "amount": price_paise,
+            "pack_id": pack_id,
+            "credits": credits_to_add,
+        }
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Razorpay order creation failed: %s", exc)
+        raise HTTPException(status_code=502, detail="Payment gateway error. Please try again.") from exc
+
+
+@router.post("/options-credits/verify")
+def verify_options_credits_payment(
+    payload: dict,
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Verifies Razorpay payment signature and adds credits to the user's account.
+    Called by the frontend after a successful Razorpay checkout.
+    """
+    order_id: str = payload.get("razorpay_order_id", "")
+    payment_id: str = payload.get("razorpay_payment_id", "")
+    signature: str = payload.get("razorpay_signature", "")
+    pack_id: str = payload.get("pack_id", "")
+
+    if not all([order_id, payment_id, signature, pack_id]):
+        raise HTTPException(status_code=400, detail="Missing payment verification fields.")
+    if pack_id not in _CREDIT_PACKS:
+        raise HTTPException(status_code=400, detail=f"Unknown pack '{pack_id}'.")
+
+    # Verify HMAC-SHA256 signature
+    expected = hmac.new(
+        RAZORPAY_KEY_SECRET.encode(),
+        f"{order_id}|{payment_id}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(expected, signature):
+        raise HTTPException(status_code=400, detail="Payment signature verification failed.")
+
+    credits_to_add, _ = _CREDIT_PACKS[pack_id]
+    user.options_credits = (getattr(user, "options_credits", 0) or 0) + credits_to_add  # type: ignore[assignment]
+    db.commit()
+    logger.info("Verified payment — added %d credits to user %d", credits_to_add, user.id)
+    return {"success": True, "credits_added": credits_to_add}

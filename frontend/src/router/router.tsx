@@ -18,6 +18,7 @@ import { TransactionsPage } from '../ui/pages/TransactionsPage'
 import { AuthCallbackPage } from '../ui/pages/AuthCallbackPage'
 import NiftyOptionsAnalyzerPage from '../ui/pages/NiftyOptionsAnalyzerPage'
 import { BillingPage } from '../ui/pages/BillingPage'
+import { OptionsBillingPage } from '../ui/pages/OptionsBillingPage'
 
 export const router = createBrowserRouter([
   { path: '/', element: <LandingPage /> },
@@ -45,6 +46,7 @@ export const router = createBrowserRouter([
       { path: 'brokers', element: <BrokersPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: 'billing', element: <BillingPage /> },
+      { path: 'options-billing', element: <OptionsBillingPage /> },
       { path: 'options-analyzer', element: <NiftyOptionsAnalyzerPage /> },
     ],
   },
