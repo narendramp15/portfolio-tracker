@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { FileText, TrendingUp, Calculator, Download, AlertCircle, Info } from 'lucide-react'
+import { FileText, TrendingUp, Calculator, Download, AlertCircle, Info, Share2, FileDown } from 'lucide-react'
 import { api } from '../../lib/api'
 import { useAppStore } from '../../store/appStore'
 import { formatCurrencyINR } from '../../lib/format'
@@ -139,6 +139,52 @@ export default function TaxReportsPage() {
         }
     }
 
+    const handleDownloadPDF = async () => {
+        if (!taxReport || !selectedPortfolioId) return
+        try {
+            const params = new URLSearchParams({ method })
+            if (financialYear !== 'All Time') params.append('financial_year', financialYear)
+            const response = await api.get(
+                `/tax-reports/portfolios/${selectedPortfolioId}/capital-gains/export-pdf?${params}`,
+                { responseType: 'blob' },
+            )
+            const blob = new Blob([response.data], { type: 'application/pdf' })
+            const url = window.URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `tax-report-${taxReport.portfolio_name}-${taxReport.financial_year}.pdf`
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            window.URL.revokeObjectURL(url)
+        } catch (err: any) {
+            if (err?.response?.status === 402) {
+                const text = await err.response.data.text()
+                const detail = JSON.parse(text)?.detail || 'Upgrade to Pro for unlimited exports.'
+                setUpgradeReason(detail)
+                setShowUpgrade(true)
+                return
+            }
+            console.error('PDF export failed:', err)
+            alert('Failed to export PDF. The feature may require server-side setup.')
+        }
+    }
+
+    const handleShareWithCA = async () => {
+        if (!taxReport || !selectedPortfolioId) return
+        try {
+            const params = new URLSearchParams({ method })
+            if (financialYear !== 'All Time') params.append('financial_year', financialYear)
+            const { data } = await api.get(
+                `/tax-reports/portfolios/${selectedPortfolioId}/capital-gains/share?${params}`,
+            )
+            const mailto = `mailto:?subject=${encodeURIComponent(data.subject)}&body=${encodeURIComponent(data.body)}`
+            window.location.href = mailto
+        } catch {
+            alert('Failed to generate share link.')
+        }
+    }
+
     if (!selectedPortfolioId) {
         return (
             <div className="flex items-center justify-center h-96">
@@ -225,15 +271,32 @@ export default function TaxReportsPage() {
                             </label>
                         </div>
 
-                        {/* Download */}
-                        <div className="flex items-end">
+                        {/* Export / Share buttons */}
+                        <div className="flex items-end gap-2">
                             <button
                                 onClick={handleDownloadCSV}
                                 disabled={!taxReport}
-                                className="w-full bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                className="flex-1 bg-primary hover:bg-primary/90 text-white px-3 py-2 rounded-lg flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
                             >
                                 <Download className="w-4 h-4" />
-                                Export CSV
+                                CSV
+                            </button>
+                            <button
+                                onClick={handleDownloadPDF}
+                                disabled={!taxReport}
+                                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                            >
+                                <FileDown className="w-4 h-4" />
+                                PDF
+                            </button>
+                            <button
+                                onClick={handleShareWithCA}
+                                disabled={!taxReport}
+                                title="Email summary to your CA"
+                                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                            >
+                                <Share2 className="w-4 h-4" />
+                                Share
                             </button>
                         </div>
                     </div>

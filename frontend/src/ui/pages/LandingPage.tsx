@@ -153,17 +153,17 @@ export function LandingPage() {
 
                             {/* Headline */}
                             <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight mb-6">
-                                <span className="text-slate-800">Track all your investments in </span>
+                                <span className="text-slate-800">India's tax-ready</span>{' '}
                                 <span className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
-                                    one intelligent dashboard
+                                    portfolio tracker
                                 </span>
                             </h1>
 
                             {/* Subheadline with specific benefits */}
                             <p className="text-xl text-muted mb-8 leading-relaxed">
-                                Connect <span className="font-semibold text-indigo-600">Zerodha, Groww & 5Paisa</span> in seconds.
-                                Get live P&L, AI-powered insights, and tax-ready reports —
-                                <span className="font-semibold text-slate-800"> all automatically synced</span>.
+                                STCG/LTCG reports in 2 clicks. Connect <span className="font-semibold text-indigo-600">Zerodha & 5Paisa</span> via
+                                secure OAuth — <span className="font-semibold text-slate-800">we never store your broker password</span>.
+                                Export ITR-ready CSV & PDF, all for free.
                             </p>
 
                             {/* CTAs */}
@@ -189,11 +189,11 @@ export function LandingPage() {
                             <div className="flex flex-wrap items-center gap-6 text-sm text-muted">
                                 <div className="flex items-center gap-2">
                                     <Lock className="h-4 w-4 text-emerald-500" />
-                                    <span>Bank-grade encryption</span>
+                                    <span>No broker passwords stored</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <IndianRupee className="h-4 w-4 text-indigo-500" />
-                                    <span>Made for India</span>
+                                    <span>STCG/LTCG in 2 clicks</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <CheckCircle className="h-4 w-4 text-emerald-500" />

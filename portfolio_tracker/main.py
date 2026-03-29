@@ -5,8 +5,9 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -16,8 +17,8 @@ from portfolio_tracker.config import settings
 from portfolio_tracker.database import create_tables
 from portfolio_tracker.routers import (ai_proxy, analysis, auth, billing,
                                        broker, broker_token_refresh, dashboard,
-                                       market, portfolio, tax_reports,
-                                       transactions)
+                                       market, mutual_funds, portfolio,
+                                       tax_reports, transactions)
 
 # Configure logging
 logging.basicConfig(
@@ -100,6 +101,13 @@ _app = FastAPI(
     version="1.0.0",
 )
 
+
+@_app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.error(f"422 Validation error on {request.method} {request.url}: {exc.errors()}")
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
+
 # MIDDLEWARE ORDER MATTERS!
 # Middleware added first runs LAST in the request chain
 
@@ -168,6 +176,7 @@ _app.include_router(tax_reports.router, prefix="/api", tags=["tax-reports"])
 _app.include_router(broker_token_refresh.router, prefix="/api/broker", tags=["broker-token"])
 _app.include_router(ai_proxy.router, prefix="/api/ai", tags=["ai"])
 _app.include_router(billing.router, prefix="/api/billing", tags=["billing"])
+_app.include_router(mutual_funds.router, prefix="/api", tags=["mutual-funds"])
 
 
 # Public pages (no authentication required)
@@ -251,17 +260,6 @@ async def favicon_svg():
 async def health_check():
     """Health check endpoint."""
     return {"status": "ok"}
-
-
-@_app.get("/debug/config")
-async def debug_config():
-    """Debug endpoint to check configuration (remove in production if needed)."""
-    return {
-        "cors_origins": settings.CORS_ORIGINS,
-        "frontend_url": settings.FRONTEND_URL,
-        "google_oauth_configured": bool(settings.GOOGLE_CLIENT_ID),
-        "google_redirect_uri": settings.GOOGLE_REDIRECT_URI,
-    }
 
 
 if __name__ == "__main__":

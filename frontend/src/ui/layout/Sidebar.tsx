@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { BarChart3, Briefcase, CreditCard, Crown, FileText, LayoutDashboard, Link2, Settings, TrendingUp, Zap } from 'lucide-react'
+import { BarChart3, Briefcase, CreditCard, Crown, FileText, LayoutDashboard, Link2, PieChart, Settings, TrendingUp, Zap } from 'lucide-react'
 
 import { cn } from '../../lib/cn'
 import { useSubscription } from '../../hooks/useSubscription'
@@ -7,6 +7,7 @@ import { useSubscription } from '../../hooks/useSubscription'
 const baseNav = [
   { to: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/app/holdings', label: 'Holdings', icon: Briefcase },
+  { to: '/app/mutual-funds', label: 'Mutual Funds', icon: PieChart },
   { to: '/app/transactions', label: 'Transactions', icon: CreditCard },
   { to: '/app/analysis', label: 'Analysis', icon: TrendingUp },
   { to: '/app/tax-reports', label: 'Tax Reports', icon: FileText },

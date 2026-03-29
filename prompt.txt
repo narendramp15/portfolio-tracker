@@ -1,0 +1,172 @@
+You are a senior full-stack engineer and product architect. Build a 
+production-grade AI-powered Nifty/BankNifty Options Analyzer SaaS application.
+
+═══════════════════════════════════════════════
+CORE REQUIREMENTS
+═══════════════════════════════════════════════
+
+AUTHENTICATION SYSTEM its already there check it, its not broken:
+- Login / Signup page (email + password)
+- Protected routes — no access to analyzer without login
+- Session management (JWT tokens stored in memory, not localStorage)
+- "Remember me" toggle
+- Logout functionality
+- User profile display (name, tier badge, usage counter)
+
+═══════════════════════════════════════════════
+PRICING TIERS (user-friendly names, hidden model details)
+═══════════════════════════════════════════════
+
+Map tiers to models WITHOUT exposing model names to users:
+
+┌─────────────┬──────────────────┬───────────────────────────────┬──────────┐
+│ User Tier   │ Internal Model   │ Features                      │ Price    │
+├─────────────┼──────────────────┼───────────────────────────────┼──────────┤
+│ 🥉 STARTER  │ claude-haiku-*   │ Quick analysis only           │ ₹99/mo   │
+│             │                  │ 10 analyses/day               │          │
+│             │                  │ Basic support/resistance      │          │
+│             │                  │ No options strategy           │          │
+├─────────────┼──────────────────┼───────────────────────────────┼──────────┤
+│ 🥈 PRO      │ claude-sonnet-*  │ Full + Quick analysis         │ ₹299/mo  │
+│             │                  │ 30 analyses/day               │          │
+│             │                  │ Complete trade setups         │          │
+│             │                  │ Options strategy included     │          │
+│             │                  │ Timing guide + Risk factors   │          │
+├─────────────┼──────────────────┼───────────────────────────────┼──────────┤
+│ 🥇 ELITE    │ claude-opus-*    │ Unlimited analyses            │ ₹799/mo  │
+│             │                  │ Deepest market reasoning      │          │
+│             │                  │ Multi-index + Sector analysis │          │
+│             │                  │ Priority response speed       │          │
+│             │                  │ Advanced options strategies   │          │
+│             │                  │ (Iron Condor, Spreads, etc.)  │          │
+└─────────────┴──────────────────┴───────────────────────────────┴──────────┘
+
+TIER RULES:
+- Never show model names (Haiku/Sonnet/Opus) anywhere in UI
+- Show only tier name + feature list
+- Upgrade prompts when user hits daily limit
+- Graceful "upgrade to unlock" UI for locked features
+
+═══════════════════════════════════════════════
+PER-USAGE BILLING SYSTEM
+═══════════════════════════════════════════════
+
+Track and display usage per user:
+- analyses_used_today (resets midnight IST)
+- analyses_used_this_month
+- tokens_consumed_this_month (shown as "AI Credits" to user)
+- cost_this_month_inr (shown only on billing page)
+
+Usage counter display:
+- Show "12 / 30 analyses used today" in header
+- Progress bar for daily limit
+- Warning at 80% usage: "8 analyses remaining today"
+- Soft block at limit: "Upgrade to Pro for more analyses"
+
+Credit system (pay-per-use option):
+- 1 Quick Analysis = 1 credit
+- 1 Full Analysis = 3 credits  
+- Credit packs: ₹49 (10 credits), ₹149 (40 credits), ₹399 (120 credits)
+- Credits never expire
+
+═══════════════════════════════════════════════
+APP ARCHITECTURE
+═══════════════════════════════════════════════
+
+Pages / Views:
+1. /login — Auth page (login + signup tabs)
+2. /dashboard — Main analyzer (protected)
+3. /billing — Plan details, usage, upgrade (protected)
+4. /profile — User settings (protected)
+
+State Management:
+- authState: { user, token, tier, isAuthenticated }
+- usageState: { dailyCount, monthlyCount, dailyLimit, creditsLeft }
+- marketState: { all market data fields }
+- analysisState: { response, loading, error, history[] }
+
+Analysis History:
+- Store last 5 analyses in session memory
+- Show timestamp + market data snapshot per entry
+- Allow re-viewing past analyses without new API call
+
+═══════════════════════════════════════════════
+UI / UX REQUIREMENTS
+═══════════════════════════════════════════════
+
+Design system:
+- Dark terminal/trading aesthetic (black + green accents)
+- Monospace font for numbers and data
+- Color coding: green=bullish, red=bearish, yellow=neutral/warning
+- Mobile responsive (traders use phones)
+- Smooth loading states with skeleton screens
+- Toast notifications for: login success, limit warnings, errors
+
+Tier-gated UI:
+- Starter users: Full analysis button shows lock icon + "PRO feature"
+- Hovering locked features shows upgrade tooltip
+- Upgrade CTA is prominent but not annoying
+
+Header (when logged in):
+- Logo | Index: Nifty ₹24,765 ▲ | [Tier Badge] | Credits: 28 | [Avatar] ▼
+
+═══════════════════════════════════════════════
+SECURITY REQUIREMENTS
+═══════════════════════════════════════════════
+
+- API key NEVER exposed to frontend
+- All Claude API calls proxied through backend
+- Rate limiting per user per tier
+- Input sanitization on all market data fields
+- Session timeout after 4 hours of inactivity
+- Tier verification on every API call (server-side)
+
+═══════════════════════════════════════════════
+MOCK DATA FOR DEMO (no real backend needed for prototype)
+═══════════════════════════════════════════════
+
+Simulate with hardcoded users:
+- starter@demo.com / demo123 → Starter tier, 3 analyses left today
+- pro@demo.com / demo123 → Pro tier, 22 analyses left today  
+- elite@demo.com / demo123 → Elite tier, unlimited
+
+Mock billing page with dummy plan cards and upgrade buttons.
+Mock usage stats that update in real-time as user runs analyses.
+
+═══════════════════════════════════════════════
+IMPLEMENTATION NOTES
+═══════════════════════════════════════════════
+
+1. Build as single React file (JSX) with all state in useState/useReducer
+2. Use Tailwind utility classes for styling
+3. Route between views using a simple currentView state variable
+4. Claude API call must use the correct model string per tier:
+   - Starter → "claude-haiku-4-5-20251001"  
+   - Pro     → "claude-sonnet-4-6"
+   - Elite   → "claude-opus-4-6"
+5. Prompt sent to Claude must match tier capability:
+   - Starter → quick 150-word prompt only
+   - Pro     → full detailed prompt
+   - Elite   → full prompt + "provide advanced options strategies 
+                including spreads, iron condors, and positional ideas"
+6. Never hardcode or expose API key in JSX — receive via props or 
+   environment. For demo, show an API key input field on login screen.
+7. All monetary values in INR (₹)
+8. All times in IST
+
+═══════════════════════════════════════════════
+DELIVERABLE
+═══════════════════════════════════════════════
+
+Single production-ready .jsx file with:
+✅ Login/Signup screen
+✅ Protected analyzer dashboard  
+✅ Tier-based model selection (hidden from user)
+✅ Usage tracking + daily limits
+✅ Billing/upgrade page
+✅ Analysis history (last 5)
+✅ All existing market data fields from previous version
+✅ Full dark trading terminal aesthetic
+✅ Mobile responsive layout
+✅ Toast notification system
+✅ Smooth animations and loading states

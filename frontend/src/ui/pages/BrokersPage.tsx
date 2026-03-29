@@ -307,7 +307,16 @@ export function BrokersPage() {
         )}
 
         {(syncHoldings.isSuccess || syncTrades.isSuccess || syncHistoricalTrades.isSuccess) && (
-          <div className="mt-3 text-sm text-success">Sync completed.</div>
+          <div className="mt-3 text-sm text-success">
+            {(() => {
+              const d = syncTrades.data ?? syncHistoricalTrades.data
+              if (d && typeof d === 'object' && 'transactions_imported' in d) {
+                const r = d as { transactions_count: number; transactions_imported: number }
+                return `Sync completed — ${r.transactions_imported} trade${r.transactions_imported !== 1 ? 's' : ''} imported (${r.transactions_count} found, ${r.transactions_count - r.transactions_imported} duplicates skipped).`
+              }
+              return 'Sync completed.'
+            })()}
+          </div>
         )}
       </Card>
 

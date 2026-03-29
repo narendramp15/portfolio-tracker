@@ -17,6 +17,10 @@ from portfolio_tracker.auth import (ACCESS_TOKEN_EXPIRE_MINUTES,
 from portfolio_tracker.config import settings
 from portfolio_tracker.database import get_db
 from portfolio_tracker.deps import get_current_user
+from portfolio_tracker.rate_limit import (auth_rate_limiter,
+                                          password_reset_rate_limiter,
+                                          register_rate_limiter)
+from portfolio_tracker.services.email_service import send_password_reset_email
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +38,9 @@ oauth.register(
 
 
 @router.post("/register", response_model=schemas.Token)
-async def register(user_data: schemas.UserRegister, db: Session = Depends(get_db)):
+async def register(request: Request, user_data: schemas.UserRegister, db: Session = Depends(get_db)):
     """Register a new user."""
+    register_rate_limiter.check(request)
     logger.info(f"Registration attempt for email: {user_data.email}, username: {user_data.username}")
     
     # Check if user already exists
@@ -88,8 +93,9 @@ async def register(user_data: schemas.UserRegister, db: Session = Depends(get_db
 
 
 @router.post("/login", response_model=schemas.Token)
-async def login(user_data: schemas.UserLogin, db: Session = Depends(get_db)):
+async def login(request: Request, user_data: schemas.UserLogin, db: Session = Depends(get_db)):
     """Login with email and password."""
+    auth_rate_limiter.check(request)
     logger.info(f"Login attempt for email: {user_data.email}")
     
     # Find user by email
@@ -143,10 +149,13 @@ async def get_current_user_endpoint(current_user: models.UserModel = Depends(get
 
 @router.post("/forgot-password", response_model=schemas.MessageResponse)
 async def forgot_password(
+    http_request: Request,
     request: schemas.PasswordResetRequest,
     db: Session = Depends(get_db)
 ):
     """Request a password reset token."""
+    password_reset_rate_limiter.check(http_request)
+
     # Find user by email
     user = db.query(models.UserModel).filter(
         models.UserModel.email == request.email
@@ -176,11 +185,9 @@ async def forgot_password(
     db.add(reset_token)
     db.commit()
     
-    # In production, send email here
-    # For now, just log the token (development only!)
-    print(f"🔑 Password reset token for {user.email}: {token}")
-    print(f"   Token expires at: {expires_at}")
-    print(f"   Use this token in the reset password form within 1 hour.")
+    # Send password-reset email (falls back to console log if SMTP not configured)
+    send_password_reset_email(user.email, token, settings.FRONTEND_URL)
+    logger.info("Password reset requested for user_id=%s", user.id)
     
     return {"message": "If the email exists, a reset token has been generated. Use it within 1 hour."}
 

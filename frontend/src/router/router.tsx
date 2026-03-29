@@ -19,6 +19,7 @@ import { AuthCallbackPage } from '../ui/pages/AuthCallbackPage'
 import NiftyOptionsAnalyzerPage from '../ui/pages/NiftyOptionsAnalyzerPage'
 import { BillingPage } from '../ui/pages/BillingPage'
 import { OptionsBillingPage } from '../ui/pages/OptionsBillingPage'
+import { MutualFundsPage } from '../ui/pages/MutualFundsPage'
 
 export const router = createBrowserRouter([
   { path: '/', element: <LandingPage /> },
@@ -40,6 +41,7 @@ export const router = createBrowserRouter([
       { index: true, element: <Navigate to="/app/dashboard" replace /> },
       { path: 'dashboard', element: <DashboardPage /> },
       { path: 'holdings', element: <HoldingsPage /> },
+      { path: 'mutual-funds', element: <MutualFundsPage /> },
       { path: 'transactions', element: <TransactionsPage /> },
       { path: 'analysis', element: <TechnicalAnalysisPage /> },
       { path: 'tax-reports', element: <TaxReportsPage /> },

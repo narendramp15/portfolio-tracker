@@ -186,11 +186,12 @@ class Settings:
             logger.warning("CORS_ORIGINS contains '*' with other origins. Removing '*' for security.")
         
         if "*" in origin_list and not self._testing:
-            # If "*" is the only origin and we're not in testing, warn about security
-            logger.warning(
-                "SECURITY WARNING: CORS_ORIGINS is set to '*'. This is insecure when "
-                "allow_credentials=True. Never use '*' in production!"
+            # Block wildcard CORS in non-testing mode — credentials require explicit origins
+            logger.error(
+                "SECURITY: CORS_ORIGINS='*' is blocked with allow_credentials=True. "
+                "Set explicit origins (e.g., https://quantleap.in). Falling back to localhost."
             )
+            origin_list = ["http://localhost:5173", "http://localhost:8000"]
         
         # Automatically add www and non-www variants for each origin
         expanded_origins = set(origin_list)

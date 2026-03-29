@@ -112,8 +112,13 @@ class TaxCalculator:
         Returns:
             Dict with realized and optionally unrealized gains breakdown
         """
-        # Sort transactions by date (oldest first)
-        sorted_txns = sorted(txns, key=lambda t: t.transaction_date)
+        # Sort transactions by date (oldest first); strip tz so mixed naive/aware rows don't crash
+        def _naive(dt):
+            if dt is None:
+                return datetime.min
+            return dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
+
+        sorted_txns = sorted(txns, key=lambda t: _naive(t.transaction_date))
         
         buy_queue = []  # List of buy lots: [{'qty': Decimal, 'price': Decimal, 'date': datetime}, ...]
         stcg_total = Decimal("0")
@@ -257,14 +262,18 @@ class TaxCalculator:
             start_year = 2000 + start_year
         
         # Indian FY: April 1 to March 31
-        fy_start = datetime(start_year, 4, 1, tzinfo=timezone.utc)
-        fy_end = datetime(end_year, 3, 31, 23, 59, 59, tzinfo=timezone.utc)
+        fy_start = datetime(start_year, 4, 1)
+        fy_end = datetime(end_year, 3, 31, 23, 59, 59)
         
         filtered = []
         for txn in transactions:
+            # Normalise: strip tzinfo so comparison is always offset-naive
+            txn_date = txn.transaction_date
+            if txn_date is not None and txn_date.tzinfo is not None:
+                txn_date = txn_date.replace(tzinfo=None)
             # Only filter sell transactions (they trigger capital gains)
             if txn.type.lower() == 'sell':
-                if fy_start <= txn.transaction_date <= fy_end:
+                if txn_date is not None and fy_start <= txn_date <= fy_end:
                     filtered.append(txn)
             else:
                 # Always include buy transactions (needed for cost basis)
