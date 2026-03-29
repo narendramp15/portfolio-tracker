@@ -146,24 +146,21 @@ Choose one of these free options:
 cp .env.example .env
 ```
 
-2. Update the `.env` file with your configuration:
-```env
-DEBUG=True
-DATABASE_URL=postgresql://user:password@host:5432/dbname  # Use PostgreSQL for persistence
-SECRET_KEY=your-secret-key-here  # Generate with: openssl rand -hex 32
-ENCRYPTION_KEY=your-encryption-key  # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+2. Update the `.env` file with your configuration. See `.env.example` for the full template. Key variables:
 
-# Google OAuth (optional, see GOOGLE_OAUTH_SETUP.md)
-GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=your-google-client-secret
-GOOGLE_REDIRECT_URI=http://localhost:8000/api/auth/google/callback
-FRONTEND_URL=http://localhost:5173
-
-# Broker API credentials (optional)
-ZERODHA_API_KEY=your_zerodha_api_key
-ZERODHA_API_SECRET=your_zerodha_api_secret
-ZERODHA_REDIRECT_URL=http://localhost:8000/api/broker/zerodha/callback
-```
+| Variable                                                                                    | Required       | Description                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SECRET_KEY`                                                                                | **Yes**        | JWT signing key. Generate with `openssl rand -hex 32`                                                                                                                                       |
+| `ENCRYPTION_KEY`                                                                            | **Yes**        | Fernet key for encrypting broker credentials. Generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. Must be persistent across deploys. |
+| `DATABASE_URL` or `PGUSER`+`PGPASSWORD`+`PGHOST`+`PGDATABASE`                               | **Yes**        | Database connection. Individual PG vars are auto-constructed into a connection string.                                                                                                      |
+| `CORS_ORIGINS`                                                                              | **Yes** (prod) | Comma-separated allowed origins. Wildcard `*` is blocked with credentials.                                                                                                                  |
+| `FRONTEND_URL`                                                                              | **Yes** (prod) | Frontend URL for OAuth redirects (e.g. `https://quantleap.in`).                                                                                                                             |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`                           | Recommended    | Google OAuth. See [GOOGLE_OAUTH_SETUP.md](GOOGLE_OAUTH_SETUP.md).                                                                                                                           |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`                         | Recommended    | SMTP for password-reset emails. Falls back to console log if unset.                                                                                                                         |
+| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_PLAN_ID_PRO`, `RAZORPAY_WEBHOOK_SECRET` | Optional       | Razorpay billing integration.                                                                                                                                                               |
+| `ANTHROPIC_API_KEY`, `MODEL_STARTER`, `MODEL_PRO`, `MODEL_ELITE`                            | Optional       | AI proxy for Nifty Options Analyzer.                                                                                                                                                        |
+| `ZERODHA_REDIRECT_URL`                                                                      | Optional       | Zerodha OAuth callback URL. Per-user keys are stored encrypted in DB.                                                                                                                       |
+| `5PAISA_API_KEY`, `5PAISA_API_SECRET`                                                       | Optional       | 5Paisa broker integration.                                                                                                                                                                  |
 
 ### Google OAuth Setup
 

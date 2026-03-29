@@ -53,6 +53,7 @@ class UserModel(Base):
     password_reset_tokens = relationship("PasswordResetTokenModel", back_populates="user", cascade="all, delete-orphan")
     export_logs = relationship("ExportLogModel", back_populates="user", cascade="all, delete-orphan")
     options_analysis_logs = relationship("OptionsAnalysisLogModel", back_populates="user", cascade="all, delete-orphan")
+    mf_holdings = relationship("MutualFundHoldingModel", back_populates="owner", cascade="all, delete-orphan")
 
 
 class PasswordResetTokenModel(Base):
@@ -248,6 +249,60 @@ class OptionsAnalysisLogModel(Base):
 
     __table_args__ = (
         Index('ix_options_logs_user_id', 'user_id'),
+    )
+
+
+class MutualFundHoldingModel(Base):
+    """Mutual fund folios imported from CAMS/KFintech CAS statements."""
+
+    __tablename__ = "mf_holdings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    folio_number = Column(String(50), nullable=False)
+    scheme_name = Column(String(300), nullable=False)
+    amc = Column(String(150), nullable=True)           # Fund house / AMC name
+    isin = Column(String(20), nullable=True, index=True)
+    units = Column(Numeric(20, 4), nullable=False, default=Decimal("0"))
+    nav = Column(Numeric(20, 4), nullable=True)        # Latest NAV (from CAS or refreshed)
+    cost_value = Column(Numeric(20, 4), nullable=True) # Total invested (cost)
+    current_value = Column(Numeric(20, 4), nullable=True)
+    category = Column(String(100), nullable=True)      # Equity, Debt, Hybrid, …
+    registrar = Column(String(20), nullable=True)      # CAMS / KFintech
+    cas_import_date = Column(DateTime, nullable=True)   # When this CAS was generated
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    # Relationships
+    owner = relationship("UserModel", back_populates="mf_holdings")
+    mf_transactions = relationship("MutualFundTransactionModel", back_populates="holding", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index('ix_mf_holdings_user_folio', 'user_id', 'folio_number'),
+        UniqueConstraint('user_id', 'folio_number', 'scheme_name', name='uix_user_folio_scheme'),
+    )
+
+
+class MutualFundTransactionModel(Base):
+    """Individual MF transactions (SIP / purchase / redemption) from CAS."""
+
+    __tablename__ = "mf_transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    holding_id = Column(Integer, ForeignKey("mf_holdings.id"), nullable=False, index=True)
+    type = Column(String(30), nullable=False)          # purchase / redemption / switch_in / switch_out / dividend
+    amount = Column(Numeric(20, 4), nullable=True)     # ₹ value of the transaction
+    units = Column(Numeric(20, 4), nullable=True)
+    nav = Column(Numeric(20, 4), nullable=True)
+    transaction_date = Column(DateTime, nullable=False)
+    description = Column(String(300), nullable=True)    # Original CAS description line
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    # Relationships
+    holding = relationship("MutualFundHoldingModel", back_populates="mf_transactions")
+
+    __table_args__ = (
+        Index('ix_mf_tx_holding_date', 'holding_id', 'transaction_date'),
     )
 
 

@@ -1,0 +1,7 @@
+symbol,type,quantity,price,date,notes
+RELIANCE,buy,10,2450.50,2025-01-15,Initial purchase
+TCS,buy,5,3800.00,2025-02-10,Added on dip
+INFY,sell,8,1520.75,2025-03-01,Partial exit
+HDFCBANK,buy,15,1650.00,2025-03-15,
+ICICIBANK,buy,20,1180.25,2025-04-01,SIP allocation
+WIPRO,sell,12,420.00,2025-04-15,Full exit

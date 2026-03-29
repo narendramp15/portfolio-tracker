@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Filter, Search, Download, Plus } from 'lucide-react'
+import { Filter, Search, Download, Plus, Upload } from 'lucide-react'
 
 import { api } from '../../lib/api.ts'
 import { formatCurrencyINR } from '../../lib/format.ts'
 import { type TransactionRow, type Portfolio } from '../../types/domain'
 import { Card } from '../components/Card'
+import { CSVImportUpload } from '../components/CSVImportUpload'
 import { TransactionForm } from '../components/TransactionForm'
 import { UpgradeModal } from '../components/UpgradeModal'
 
@@ -25,6 +26,7 @@ export function TransactionsPage() {
   const [type, setType] = useState<string>('all')
   const [q, setQ] = useState('')
   const [isTransactionOpen, setIsTransactionOpen] = useState(false)
+  const [isImportOpen, setIsImportOpen] = useState(false)
   const [showUpgrade, setShowUpgrade] = useState(false)
   const [upgradeReason, setUpgradeReason] = useState('')
 
@@ -105,6 +107,15 @@ export function TransactionsPage() {
             </button>
             <button
               type="button"
+              onClick={() => setIsImportOpen((v) => !v)}
+              className="inline-flex items-center gap-2 rounded-xl border border-border bg-bg px-4 py-2 text-sm font-semibold hover:bg-surface"
+              title="Import transactions from a CSV file"
+            >
+              <Upload className="h-4 w-4" />
+              Import CSV
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 const portfolios = portfoliosQuery.data ?? []
                 if (portfolios.length === 0) {
@@ -122,6 +133,23 @@ export function TransactionsPage() {
           </div>
         </div>
       </div>
+
+      {/* CSV Import panel */}
+      {isImportOpen && (
+        <Card>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold">Import Transactions from CSV</h2>
+            <button
+              type="button"
+              className="text-xs text-muted hover:text-fg"
+              onClick={() => setIsImportOpen(false)}
+            >
+              Close
+            </button>
+          </div>
+          <CSVImportUpload onDone={() => setIsImportOpen(false)} />
+        </Card>
+      )}
 
       {query.isLoading ? (
         <div className="h-[240px] animate-pulse rounded-xl border border-border bg-surface" />

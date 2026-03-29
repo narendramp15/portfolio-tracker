@@ -5,7 +5,8 @@ from decimal import Decimal
 from io import StringIO
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import (APIRouter, Depends, File, HTTPException, Query,
+                     UploadFile, status)
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -15,6 +16,7 @@ from portfolio_tracker.database import get_db
 from portfolio_tracker.deps import (check_export_limit, get_current_user,
                                     log_export)
 from portfolio_tracker.models import UserModel
+from portfolio_tracker.services.csv_import import parse_csv
 
 router = APIRouter()
 
@@ -178,6 +180,167 @@ async def list_all_transactions(
     except Exception as e:
         print(f"Error loading transactions: {e}")
         return []
+
+
+# ---------------------------------------------------------------------------
+# CSV Import  (must be declared BEFORE /{portfolio_id} routes so the literal
+# path segments are matched first — Starlette routes in definition order)
+# ---------------------------------------------------------------------------
+
+_MAX_CSV_SIZE = 5 * 1024 * 1024  # 5 MB
+
+
+@router.post("/import-csv")
+async def import_transactions_csv(
+    file: UploadFile = File(...),
+    portfolio_id: int = Query(..., description="Target portfolio"),
+    broker: Optional[str] = Query(
+        default=None,
+        description="Broker hint: zerodha, groww, fivepaisa, generic. Auto-detected if omitted.",
+    ),
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Import transactions from a CSV file.
+
+    Supported formats:
+    - **Zerodha** tradebook (Console → Trade book → Download)
+    - **Groww** trade report
+    - **5Paisa** trade report
+    - **Generic / manual** CSV with columns: symbol, type, quantity, price, date, notes
+
+    The format is auto-detected from headers unless `broker` is specified.
+    """
+    # Validate portfolio ownership
+    portfolio = (
+        db.query(models.PortfolioModel)
+        .filter(
+            models.PortfolioModel.id == portfolio_id,
+            models.PortfolioModel.user_id == user.id,
+        )
+        .first()
+    )
+    if not portfolio:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+
+    # Validate file type
+    if file.content_type and file.content_type not in (
+        "text/csv",
+        "application/vnd.ms-excel",
+        "application/octet-stream",
+        "text/plain",
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file type. Please upload a CSV file.",
+        )
+
+    raw = await file.read()
+    if len(raw) > _MAX_CSV_SIZE:
+        raise HTTPException(status_code=400, detail="File too large (max 5 MB).")
+
+    result = parse_csv(raw, broker_hint=broker)
+
+    if result.errors and not result.rows:
+        raise HTTPException(
+            status_code=400,
+            detail=f"CSV parsing failed: {'; '.join(result.errors[:5])}",
+        )
+
+    imported = 0
+    skipped_dupes = 0
+    from datetime import datetime as _dt
+    from datetime import timezone as _tz
+
+    for row in result.rows:
+        symbol = row["symbol"]
+        tx_type = row["type"]
+        quantity = row["quantity"]
+        price = row["price"]
+        tx_date = row["date"] or _dt.now(_tz.utc)
+        notes = row.get("notes", "")
+
+        # Find or create asset in this portfolio
+        asset = (
+            db.query(models.AssetModel)
+            .filter(
+                models.AssetModel.portfolio_id == portfolio_id,
+                models.AssetModel.symbol == symbol,
+            )
+            .first()
+        )
+        if not asset:
+            asset = models.AssetModel(
+                portfolio_id=portfolio_id,
+                symbol=symbol,
+                name=symbol,
+                quantity=Decimal("0"),
+                current_price=price,
+                purchase_price=price,
+            )
+            db.add(asset)
+            db.flush()  # get asset.id without committing
+
+        # Duplicate check: same portfolio, asset, type, qty, price, date
+        existing = (
+            db.query(models.TransactionModel)
+            .filter(
+                models.TransactionModel.portfolio_id == portfolio_id,
+                models.TransactionModel.asset_id == asset.id,
+                models.TransactionModel.type == tx_type,
+                models.TransactionModel.quantity == quantity,
+                models.TransactionModel.price == price,
+                models.TransactionModel.transaction_date == tx_date,
+            )
+            .first()
+        )
+        if existing:
+            skipped_dupes += 1
+            continue
+
+        tx = models.TransactionModel(
+            portfolio_id=portfolio_id,
+            asset_id=asset.id,
+            type=tx_type,
+            quantity=quantity,
+            price=price,
+            notes=notes,
+            transaction_date=tx_date,
+        )
+        db.add(tx)
+        imported += 1
+
+    if imported:
+        db.commit()
+
+    return {
+        "success": True,
+        "detected_format": result.detected_format,
+        "total_rows": len(result.rows),
+        "imported": imported,
+        "skipped_duplicates": skipped_dupes,
+        "skipped_invalid": result.skipped,
+        "errors": result.errors[:10],
+    }
+
+
+@router.get("/import-csv/sample")
+async def get_sample_csv():
+    """Download a sample CSV template for manual transaction import."""
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["symbol", "type", "quantity", "price", "date", "notes"])
+    writer.writerow(["RELIANCE", "buy", "10", "2450.50", "2025-01-15", "Initial purchase"])
+    writer.writerow(["TCS", "buy", "5", "3800.00", "2025-02-10", "Added on dip"])
+    writer.writerow(["INFY", "sell", "8", "1520.75", "2025-03-01", "Partial exit"])
+    writer.writerow(["HDFCBANK", "buy", "15", "1650.00", "2025-03-15", ""])
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=quantleap_import_template.csv"},
+    )
 
 
 @router.get("/{portfolio_id}")
@@ -363,3 +526,6 @@ async def delete_transaction(
     db.commit()
 
     return {"message": "Transaction deleted successfully"}
+
+
+# (CSV import routes moved above /{portfolio_id} — see top of file)
