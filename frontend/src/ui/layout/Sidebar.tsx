@@ -1,5 +1,6 @@
-import { NavLink } from 'react-router-dom'
-import { BarChart3, Briefcase, CreditCard, Crown, FileText, LayoutDashboard, Link2, PieChart, Settings, TrendingUp, Zap } from 'lucide-react'
+import { useState } from 'react'
+import { NavLink, useLocation } from 'react-router-dom'
+import { BarChart3, BookOpen, Briefcase, ChevronDown, CreditCard, Crown, FileText, LayoutDashboard, Link2, PieChart, Search, Settings, Star, TrendingUp, Zap } from 'lucide-react'
 
 import { cn } from '../../lib/cn'
 import { useSubscription } from '../../hooks/useSubscription'
@@ -17,13 +18,23 @@ const baseNav = [
   { to: '/app/options-billing', label: 'Options Plans', icon: Crown },
 ]
 
+const screenerChildren = [
+  { to: '/app/stock-screener', label: 'Value Screener', icon: Star },
+  { to: '/app/beginner-screener', label: 'Beginner Picks', icon: BookOpen },
+]
+
 export function Sidebar() {
   const { isPro } = useSubscription()
+  const { pathname } = useLocation()
   const nav = [...baseNav]
 
+  // Auto-expand screener group if any child is active
+  const screenerActive = screenerChildren.some(c => pathname.startsWith(c.to))
+  const [screenerOpen, setScreenerOpen] = useState(screenerActive)
+
   return (
-    <aside className="border-border bg-surface md:sticky md:top-0 md:h-screen md:border-r">
-      <div className="flex items-center gap-3 border-b border-border px-6 py-7 bg-gradient-to-r from-indigo-950/10 via-purple-950/5 to-transparent dark:from-indigo-950/30 dark:via-purple-950/20 dark:to-zinc-900/30">
+    <aside className="border-border bg-surface md:sticky md:top-0 md:flex md:h-screen md:flex-col md:border-r">
+      <div className="flex flex-shrink-0 items-center gap-3 border-b border-border px-6 py-7 bg-gradient-to-r from-indigo-950/10 via-purple-950/5 to-transparent dark:from-indigo-950/30 dark:via-purple-950/20 dark:to-zinc-900/30">
         <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 via-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:shadow-indigo-500/30 transition-all duration-300 hover:scale-110 group">
           <BarChart3 className="h-6 w-6 transition-transform group-hover:scale-110" />
           <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -34,7 +45,7 @@ export function Sidebar() {
         </div>
       </div>
 
-      <nav className="space-y-2 px-4 py-6">
+      <nav className="flex-1 space-y-2 overflow-y-auto px-4 py-6">
         {nav.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
@@ -53,6 +64,51 @@ export function Sidebar() {
             <span className="flex-1">{label}</span>
           </NavLink>
         ))}
+
+        {/* Stock Screener — collapsible group */}
+        <div>
+          <button
+            onClick={() => setScreenerOpen(v => !v)}
+            className={cn(
+              'flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition-all duration-200 group border',
+              screenerActive
+                ? 'bg-gradient-to-r from-indigo-600/50 via-purple-600/40 to-indigo-600/50 text-white shadow-lg shadow-indigo-500/20 border-indigo-500/50'
+                : 'text-muted hover:text-text hover:bg-border/30 border-transparent hover:border-border',
+            )}
+          >
+            <Search className="h-4 w-4 flex-shrink-0 transition-transform group-hover:scale-110" />
+            <span className="flex-1 text-left">Stock Screener</span>
+            <ChevronDown
+              className={cn(
+                'h-3.5 w-3.5 flex-shrink-0 transition-transform duration-200',
+                screenerOpen ? 'rotate-180' : '',
+              )}
+            />
+          </button>
+
+          {screenerOpen && (
+            <div className="mt-1 ml-4 space-y-1 border-l border-border/50 pl-3">
+              {screenerChildren.map(({ to, label, icon: Icon }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  className={({ isActive }) =>
+                    cn(
+                      'flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-200 group',
+                      isActive
+                        ? 'bg-indigo-600/30 text-indigo-200 border border-indigo-500/40'
+                        : 'text-muted hover:text-text hover:bg-border/30 border border-transparent',
+                    )
+                  }
+                  end
+                >
+                  <Icon className="h-3.5 w-3.5 flex-shrink-0" />
+                  <span>{label}</span>
+                </NavLink>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Billing / Upgrade link */}
         <NavLink

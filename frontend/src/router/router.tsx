@@ -20,6 +20,8 @@ import NiftyOptionsAnalyzerPage from '../ui/pages/NiftyOptionsAnalyzerPage'
 import { BillingPage } from '../ui/pages/BillingPage'
 import { OptionsBillingPage } from '../ui/pages/OptionsBillingPage'
 import { MutualFundsPage } from '../ui/pages/MutualFundsPage'
+import StockScreenerPage from '../ui/pages/StockScreenerPage'
+import BeginnerScreenerPage from '../ui/pages/BeginnerScreenerPage'
 
 export const router = createBrowserRouter([
   { path: '/', element: <LandingPage /> },
@@ -50,6 +52,8 @@ export const router = createBrowserRouter([
       { path: 'billing', element: <BillingPage /> },
       { path: 'options-billing', element: <OptionsBillingPage /> },
       { path: 'options-analyzer', element: <NiftyOptionsAnalyzerPage /> },
+      { path: 'stock-screener', element: <StockScreenerPage /> },
+      { path: 'beginner-screener', element: <BeginnerScreenerPage /> },
     ],
   },
   { path: '*', element: <NotFoundPage /> },

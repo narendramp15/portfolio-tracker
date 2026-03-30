@@ -306,6 +306,21 @@ class MutualFundTransactionModel(Base):
     )
 
 
+class StockThesisCacheModel(Base):
+    """Server-side cache for AI-generated per-stock investment theses (Pro feature)."""
+
+    __tablename__ = "stock_thesis_cache"
+
+    id = Column(Integer, primary_key=True, index=True)
+    symbol = Column(String(20), unique=True, index=True, nullable=False)  # e.g. RELIANCE.NS
+    thesis = Column(Text, nullable=False)
+    generated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index('ix_stock_thesis_symbol', 'symbol'),
+    )
+
+
 # Dataclass Models (for core business logic)
 @dataclass
 class Asset:

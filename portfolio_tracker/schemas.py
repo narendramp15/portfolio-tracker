@@ -109,10 +109,20 @@ class AssetUpdate(BaseModel):
 
 
 class Asset(AssetBase):
-    """Asset schema with database fields."""
+    """Asset schema with database fields.
+
+    Note: numeric constraints (gt=0) are intentionally removed here relative to
+    AssetBase so that response serialisation never fails for historical rows that
+    may have a stored price/quantity of 0 (e.g. created before a price refresh).
+    Input validation still enforces gt=0 via AssetCreate -> AssetBase.
+    """
 
     id: int
     portfolio_id: int
+    # Override parent gt=0 constraints — responses must not reject stored zeros
+    quantity: Decimal
+    current_price: Optional[Decimal] = None
+    purchase_price: Decimal
     previous_close: Optional[Decimal] = None
     created_at: datetime
     updated_at: datetime

@@ -18,7 +18,8 @@ from portfolio_tracker.database import create_tables
 from portfolio_tracker.routers import (ai_proxy, analysis, auth, billing,
                                        broker, broker_token_refresh, dashboard,
                                        market, mutual_funds, portfolio,
-                                       tax_reports, transactions)
+                                       stock_screener, tax_reports,
+                                       transactions)
 
 # Configure logging
 logging.basicConfig(
@@ -177,6 +178,7 @@ _app.include_router(broker_token_refresh.router, prefix="/api/broker", tags=["br
 _app.include_router(ai_proxy.router, prefix="/api/ai", tags=["ai"])
 _app.include_router(billing.router, prefix="/api/billing", tags=["billing"])
 _app.include_router(mutual_funds.router, prefix="/api", tags=["mutual-funds"])
+_app.include_router(stock_screener.router, prefix="/api/screener", tags=["stock-screener"])
 
 
 # Public pages (no authentication required)
