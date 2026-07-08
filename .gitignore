@@ -1,99 +1,94 @@
-# Byte-compiled / optimized / DLL files
+# ── Python ────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
-
-# Distribution / packaging
 .Python
+
+# Packaging / build
 build/
-develop-eggs/
 dist/
-downloads/
+sdist/
+wheels/
+*.egg-info/
+*.egg
+develop-eggs/
 eggs/
 .eggs/
-# lib/  # Commented out - conflicts with frontend/src/lib/
+# lib/  # deliberately NOT ignored - conflicts with frontend/src/lib/
 lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
 MANIFEST
 
-# PyInstaller
-*.manifest
-*.spec
-
-# Unit test / coverage reports
-htmlcov/
+# Test / coverage
+.pytest_cache/
 .tox/
 .nox/
 .coverage
 .coverage.*
-.cache
-nosetests.xml
 coverage.xml
-*.cover
-*.py,cover
+htmlcov/
 .hypothesis/
-.pytest_cache/
+.benchmarks/
 
-# Environments
+# Type checkers / linters
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+
+# ── Environments & secrets ───────────────────────────────────────────────
+# .env.example and .env.cpanel.example stay tracked (templates, no secrets)
 .env
-.venv
-env/
+.env.local
+.env.*.local
+.venv/
 venv/
+env/
 ENV/
-env.bak/
-venv.bak/
-
-# uv (Python package manager)
 .uv/
 .python-version
 
-# IDEs
+# ── Frontend (React/Vite) ─────────────────────────────────────────────────
+node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/.vite/
+*.tsbuildinfo
+.eslintcache
+npm-debug.log*
+
+# ── IDEs & OS ─────────────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 .DS_Store
+Thumbs.db
+Desktop.ini
 
-# MyPy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Ruff
-.ruff_cache/
-
-# Project specific
+# ── Local data & artifacts ────────────────────────────────────────────────
 *.db
+*.sqlite3
 *.log
 logs/
 data/
 temp/
+graphify-out/
 
-# Frontend
-frontend/node_modules/
-frontend/dist/
+# ── Local-only docs & samples (kept out of the public repo) ──────────────
 CSV_EXPORT_TESTING_SUMMARY.md
 DEPLOYMENT.md
 GOOGLE_OAUTH_SETUP.md
-ZERODHA_SETUP.md
 SUPABASE_SETUP.md
-FRONTEND_BROKER_UPDATE.md
-render.yaml
 RENDER_DEPLOY.md
+render.yaml
 sample_portfolio_export.csv
 sample_transactions_export.csv
-uv.lock
 docs/FEATURE_GAPS.md
 docs/START_EARNING.md
+# NOTE: FRONTEND_BROKER_UPDATE.md and ZERODHA_SETUP.md are already tracked,
+# so listing them here has no effect. To actually remove them from the repo:
+#   git rm --cached FRONTEND_BROKER_UPDATE.md ZERODHA_SETUP.md
+FRONTEND_BROKER_UPDATE.md
+ZERODHA_SETUP.md
