@@ -1,6 +1,12 @@
-"""Broker integration API endpoints."""
+"""Broker integration API endpoints.
 
-import os
+Thin HTTP layer: request parsing, error→status mapping, response shaping.
+Credential handling lives in ``services.broker_accounts``; portfolio
+synchronization in ``services.broker_sync``; per-broker API adapters in
+``portfolio_tracker.brokers``.
+"""
+
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -8,17 +14,84 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from kiteconnect import KiteConnect
 from sqlalchemy.orm import Session
 
-from portfolio_tracker import crud, schemas
+from portfolio_tracker import schemas
 from portfolio_tracker.brokers.zerodha import ZerodhaBroker
 from portfolio_tracker.database import get_db
-from portfolio_tracker.deps import check_broker_limit, get_current_user
-from portfolio_tracker.encryption import EncryptionManager
-from portfolio_tracker.models import (AssetModel, BrokerConfigModel,
-                                      TransactionModel, UserModel)
-from portfolio_tracker.services.symbol_mapper import symbol_mapper
+from portfolio_tracker.deps import get_current_user
+from portfolio_tracker.models import UserModel
+from portfolio_tracker.repositories import broker_configs
+from portfolio_tracker.services import broker_accounts, broker_sync
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+ZERODHA_NOT_CONNECTED_MSG = (
+    "Zerodha not connected. Please (re)connect Zerodha from the Brokers page and ensure "
+    "ZERODHA_REDIRECT_URL is set to http://localhost:8000/app/brokers."
+)
+
+
+# ── Generic config endpoints ──────────────────────────────────────────────────
+
+@router.get("/configs", response_model=list[schemas.BrokerConfigResponse])
+def get_broker_configs(
+    token: Optional[str] = Query(default=None),
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get all broker configurations for current user."""
+    try:
+        configs = broker_configs.get_broker_configs_by_user(db, user.id)
+        return [
+            schemas.BrokerConfigResponse(
+                id=config.id,
+                user_id=config.user_id,
+                broker_name=config.broker_name,
+                broker_user_id=config.broker_user_id or "",
+                is_active=config.is_active,
+                # is_authorized: True if an access token exists
+                is_authorized=bool(config.access_token),
+                last_synced=config.last_synced,
+                created_at=config.created_at,
+                updated_at=config.updated_at,
+            )
+            for config in configs
+        ]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.delete("/configs/{config_id}")
+def delete_broker_config(
+    config_id: int,
+    token: Optional[str] = Query(default=None),
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a broker configuration."""
+    try:
+        config = broker_configs.get_broker_config(db, config_id)
+        if not config or config.user_id != user.id:
+            raise HTTPException(status_code=404, detail="Broker config not found")
+
+        broker_configs.delete_broker_config(db, config_id)
+        return {"success": True, "message": "Broker config deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+# ── Zerodha ───────────────────────────────────────────────────────────────────
 
 @router.post("/zerodha/setup")
 def setup_zerodha_broker(
@@ -31,38 +104,17 @@ def setup_zerodha_broker(
 ):
     """Setup Zerodha broker with API credentials."""
     try:
-        user_id = user.id
-        
         # Test the credentials by creating a broker instance
         broker = ZerodhaBroker(api_key=api_key, api_secret=api_secret)
-        
-        # Get login URL
         login_url = broker.get_login_url()
-        
-        # Save broker config with encrypted credentials
-        config = crud.get_broker_config_by_broker_name(db, user_id, "zerodha")
-        
-        if config:
-            config = crud.update_broker_config(
-                db,
-                config.id,
-                api_key=EncryptionManager.encrypt(api_key),
-                api_secret=EncryptionManager.encrypt(api_secret),
-                consent_given=consent_given,
-            )
-        else:
-            # Enforce plan broker limit only on NEW connections
-            check_broker_limit(user, db)
-            config = crud.create_broker_config(
-                db,
-                user_id=user_id,
-                broker_name="zerodha",
-                broker_user_id="",
-                api_key=EncryptionManager.encrypt(api_key),
-                api_secret=EncryptionManager.encrypt(api_secret),
-                consent_given=consent_given,
-            )
-        
+
+        config = broker_accounts.save_credentials(
+            db, user, "zerodha",
+            api_key=api_key,
+            api_secret=api_secret,
+            consent_given=consent_given,
+        )
+
         return {
             "success": True,
             "login_url": login_url,
@@ -86,42 +138,33 @@ def zerodha_callback(
 ):
     """Handle Zerodha OAuth callback."""
     try:
-        user_id = user.id
-        
-        # Get broker config
         if config_id is not None:
-            config = crud.get_broker_config(db, config_id)
+            config = broker_configs.get_broker_config(db, config_id)
         else:
-            config = crud.get_broker_config_by_broker_name(db, user_id, "zerodha")
+            config = broker_configs.get_broker_config_by_broker_name(db, user.id, "zerodha")
 
-        if not config or config.user_id != user_id:
+        if not config or config.user_id != user.id:
             raise ValueError("Broker config not found")
-        
-        # Decrypt API credentials
-        api_key = EncryptionManager.decrypt(config.api_key or "")
-        api_secret = EncryptionManager.decrypt(config.api_secret or "")
-        
+
+        api_key, api_secret, _ = broker_accounts.decrypt_credentials(config)
         if not api_key or not api_secret:
             raise ValueError("API credentials not found")
-        
+
         # Exchange request token for access token
         broker = ZerodhaBroker(api_key=api_key, api_secret=api_secret)
         access_token = broker.set_access_token(request_token, api_secret)
-        
+
         # Get user profile
         broker.set_token(access_token)
         profile = broker.get_profile()
         broker_user_id = profile.get("user_id", "")
-        
-        # Update broker config with access token and user ID
-        config = crud.update_broker_config(
-            db,
-            config.id,
-            access_token=EncryptionManager.encrypt(access_token),
+
+        broker_accounts.store_access_token(
+            db, config, access_token,
             broker_user_id=broker_user_id,
-            last_synced=datetime.now(timezone.utc)
+            last_synced=datetime.now(timezone.utc),
         )
-        
+
         return {
             "success": True,
             "message": "Zerodha broker connected successfully",
@@ -142,22 +185,17 @@ def get_zerodha_login_url(
 ):
     """Get Zerodha login URL for authorization (legacy endpoint)."""
     try:
-        user_id = user.id
-        
         broker: Optional[ZerodhaBroker] = None
-        config = crud.get_broker_config_by_broker_name(db, user_id, "zerodha")
-        
+        config = broker_configs.get_broker_config_by_broker_name(db, user.id, "zerodha")
+
         if config and config.api_key:
-            api_key = EncryptionManager.decrypt(config.api_key)
-            api_secret = EncryptionManager.decrypt(config.api_secret or "")
-            
+            api_key, api_secret, _ = broker_accounts.decrypt_credentials(config)
             if not api_key:
                 raise ValueError("Stored Zerodha API key is invalid or missing")
-            
             broker = ZerodhaBroker(api_key=api_key, api_secret=api_secret or None)
         else:
             broker = ZerodhaBroker()
-        
+
         login_url = broker.get_login_url()
         return {"login_url": login_url, "broker": "zerodha"}
     except HTTPException:
@@ -176,69 +214,54 @@ def get_zerodha_login_url(
         )
 
 
-@router.get("/configs", response_model=list[schemas.BrokerConfigResponse])
-def get_broker_configs(
-    token: Optional[str] = Query(default=None),
-    user: UserModel = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Get all broker configurations for current user."""
-    import logging
-    logger = logging.getLogger(__name__)
-    
-    try:
-        configs = crud.get_broker_configs_by_user(db, user.id)
-        # Add is_authorized field based on whether access_token exists
-        result = []
-        for config in configs:
-            has_token = bool(config.access_token)
-            logger.info(f"Broker {config.broker_name}: access_token exists={has_token}, broker_user_id={config.broker_user_id}")
-            config_dict = {
-                "id": config.id,
-                "user_id": config.user_id,
-                "broker_name": config.broker_name,
-                "broker_user_id": config.broker_user_id or "",
-                "is_active": config.is_active,
-                "is_authorized": has_token,  # True if access token exists
-                "last_synced": config.last_synced,
-                "created_at": config.created_at,
-                "updated_at": config.updated_at,
-            }
-            result.append(schemas.BrokerConfigResponse(**config_dict))
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+def _authorized_zerodha_client(config) -> ZerodhaBroker:
+    """Decrypt, validate and return a ready-to-use Zerodha client.
 
-
-@router.delete("/configs/{config_id}")
-def delete_broker_config(
-    config_id: int,
-    token: Optional[str] = Query(default=None),
-    user: UserModel = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Delete a broker configuration."""
+    Validation is deliberately step-by-step so each failure mode surfaces a
+    specific, actionable error message (token expiry is the common case).
+    """
     try:
-        user_id = user.id
-        config = crud.get_broker_config(db, config_id)
-        
-        if not config or config.user_id != user_id:
-            raise HTTPException(status_code=404, detail="Broker config not found")
-        
-        crud.delete_broker_config(db, config_id)
-        return {"success": True, "message": "Broker config deleted"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+        api_key, api_secret, access_token = broker_accounts.decrypt_credentials(config)
+    except Exception as decrypt_error:
+        logger.error(f"Failed to decrypt credentials: {decrypt_error}")
+        raise ValueError(f"Failed to decrypt Zerodha credentials: {str(decrypt_error)}")
+
+    if not api_key.strip():
+        raise ValueError("API key is empty - Zerodha not properly configured")
+    if not access_token.strip():
+        raise ValueError("Access token is empty - Zerodha not properly configured")
+
+    # Validate the session with a lightweight profile call before syncing
+    try:
+        kite = KiteConnect(api_key=api_key)
+    except Exception as kite_error:
+        raise ValueError(f"Failed to initialize KiteConnect: {str(kite_error)}")
+    try:
+        kite.set_access_token(access_token)
+    except Exception as token_error:
+        raise ValueError(f"Failed to set access token: {str(token_error)}")
+    try:
+        kite.profile()
+    except Exception as profile_error:
+        error_details = f"{str(profile_error)}"
+        if hasattr(profile_error, 'code'):
+            error_details += f" (code: {profile_error.code})"
+        if hasattr(profile_error, 'response'):
+            error_details += f" (response: {profile_error.response})"
+        logger.warning(
+            "Zerodha profile API failed - access token likely expired; "
+            "reconnect Zerodha from the Brokers page."
         )
+        raise ValueError(f"Invalid Zerodha credentials - profile API failed: {error_details}")
+
+    broker = ZerodhaBroker(api_key=api_key, api_secret=api_secret)
+    broker.set_token(access_token)
+    try:
+        broker.get_profile()
+    except Exception as profile_error:
+        raise ValueError(f"Authentication failed: {str(profile_error)}")
+
+    return broker
 
 
 @router.post("/zerodha/sync-holdings", response_model=schemas.BrokerSyncResponse)
@@ -249,138 +272,23 @@ def sync_zerodha_holdings(
     db: Session = Depends(get_db)
 ):
     """Sync holdings from Zerodha to portfolio."""
-    import logging
-    logger = logging.getLogger(__name__)
-
     try:
-        user_id = user.id
+        config = broker_accounts.get_config_or_error(
+            db, user.id, "zerodha",
+            missing_msg=ZERODHA_NOT_CONNECTED_MSG,
+            require_token=True,
+        )
+        broker_sync.require_portfolio(db, user.id, portfolio_id)
 
-        # Get broker config
-        config = crud.get_broker_config_by_broker_name(db, user_id, "zerodha")
-        if not config or not config.access_token:
-            raise ValueError(
-                "Zerodha not connected. Please (re)connect Zerodha from the Brokers page and ensure "
-                "ZERODHA_REDIRECT_URL is set to http://localhost:8000/app/brokers."
-            )
-
-        # Get portfolio
-        portfolio = crud.get_portfolio_by_id(db, portfolio_id)
-        if not portfolio or portfolio.user_id != user_id:
-            raise ValueError("Portfolio not found")
-
-        # Decrypt access token and create broker instance
-        try:
-            access_token = EncryptionManager.decrypt(config.access_token)
-            api_key = EncryptionManager.decrypt(config.api_key or "")
-            api_secret = EncryptionManager.decrypt(config.api_secret or "")
-            logger.info(f"✓ Credentials decrypted successfully")
-        except Exception as decrypt_error:
-            logger.error(f"✗ Failed to decrypt credentials: {str(decrypt_error)}")
-            raise ValueError(f"Failed to decrypt Zerodha credentials: {str(decrypt_error)}")
-
-        # Log credential details for debugging (not the actual values)
-        logger.info(f"📋 API key: length={len(api_key)}, non-empty={bool(api_key.strip())}")
-        logger.info(f"📋 API secret: length={len(api_secret)}, non-empty={bool(api_secret.strip())}")
-        logger.info(f"📋 Access token: length={len(access_token)}, non-empty={bool(access_token.strip())}")
-        logger.info(f"📋 Broker config: api_key_stored={bool(config.api_key)}, access_token_stored={bool(config.access_token)}")
-
-        # Validate decrypted credentials are not empty
-        if not api_key.strip():
-            logger.error("✗ API key is empty after decryption")
-            raise ValueError("API key is empty - Zerodha not properly configured")
-        if not access_token.strip():
-            logger.error("✗ Access token is empty after decryption")
-            raise ValueError("Access token is empty - Zerodha not properly configured")
-
-        # Test credentials with profile API call
-        logger.info(f"🔐 Creating KiteConnect instance with api_key")
-        try:
-            kite = KiteConnect(api_key=api_key)
-            logger.info(f"✓ KiteConnect instance created")
-        except Exception as kite_error:
-            logger.error(f"✗ Failed to create KiteConnect instance: {str(kite_error)}")
-            raise ValueError(f"Failed to initialize KiteConnect: {str(kite_error)}")
-
-        logger.info(f"🔐 Setting access token on KiteConnect")
-        try:
-            kite.set_access_token(access_token)
-            logger.info(f"✓ Access token set successfully")
-        except Exception as token_error:
-            logger.error(f"✗ Failed to set access token: {str(token_error)}")
-            raise ValueError(f"Failed to set access token: {str(token_error)}")
-
-        logger.info(f"🔐 Calling profile API to validate credentials")
-        try:
-            profile = kite.profile()
-            logger.info(f"✓ Profile API call successful: user_name={profile.get('user_name', 'Unknown')}, user_id={profile.get('user_id', 'Unknown')}")
-        except Exception as profile_error:
-            error_details = f"{str(profile_error)}"
-            if hasattr(profile_error, 'code'):
-                error_details += f" (code: {profile_error.code})"
-            if hasattr(profile_error, 'response'):
-                error_details += f" (response: {profile_error.response})"
-            logger.error(f"✗ Profile API call failed: {error_details}")
-            logger.warning(f"⚠️  This usually means: 1) Access token expired, 2) API key invalid, or 3) Network issue")
-            logger.warning(f"⚠️  Solution: Try reconnecting Zerodha from the Brokers page")
-            raise ValueError(f"Invalid Zerodha credentials - profile API failed: {error_details}")
-
-        # Test the credentials by making a simple API call first
-        broker = ZerodhaBroker(api_key=api_key, api_secret=api_secret)
-        broker.set_token(access_token)
-
-        # Test with profile call first (lighter than holdings)
-        try:
-            profile = broker.get_profile()
-            logger.info(f"Profile test successful for user {user_id}: {profile.get('user_id', 'unknown')}")
-        except Exception as profile_error:
-            logger.error(f"Profile test failed for user {user_id}: {str(profile_error)}")
-            raise ValueError(f"Authentication failed: {str(profile_error)}")
-
+        broker = _authorized_zerodha_client(config)
         holdings = broker.get_holdings()
-        
-        # Create or update assets in portfolio
-        assets_imported = 0
-        for holding in holdings:
-            # Normalize symbol to Yahoo Finance format
-            normalized_symbol = symbol_mapper.normalize_broker_symbol(
-                symbol=holding.symbol,
-                exchange='NSE',  # Zerodha primarily uses NSE
-                isin=holding.isin
-            )
-            
-            # Get company name from Yahoo Finance
-            company_name = symbol_mapper.get_company_name(normalized_symbol) or holding.symbol
-            
-            # Check if asset exists
-            asset = db.query(AssetModel).filter(
-                AssetModel.portfolio_id == portfolio_id,
-                AssetModel.symbol == normalized_symbol
-            ).first()
-            
-            if not asset:
-                # Create new asset
-                asset = AssetModel(
-                    portfolio_id=portfolio_id,
-                    symbol=normalized_symbol,
-                    name=company_name,
-                    quantity=holding.quantity,
-                    current_price=holding.current_price,
-                    purchase_price=holding.average_price,
-                )
-                db.add(asset)
-                assets_imported += 1
-            else:
-                # Update existing asset
-                asset.name = company_name  # Update name in case it changed
-                asset.quantity = holding.quantity
-                asset.current_price = holding.current_price
-                asset.purchase_price = holding.average_price
-            
-            db.commit()
-        
-        # Update last synced time
-        crud.update_broker_config(db, config.id, last_synced=datetime.now(timezone.utc))
-        
+
+        assets_imported = broker_sync.upsert_holdings(db, portfolio_id, holdings)
+
+        broker_configs.update_broker_config(
+            db, config.id, last_synced=datetime.now(timezone.utc)
+        )
+
         return schemas.BrokerSyncResponse(
             success=True,
             message=f"Successfully synced {len(holdings)} holdings",
@@ -405,152 +313,31 @@ def sync_zerodha_transactions(
     db: Session = Depends(get_db),
 ):
     """Sync trades from Zerodha into portfolio transactions."""
-    import logging
-    logger = logging.getLogger(__name__)
-
     try:
-        user_id = user.id
+        config = broker_accounts.get_config_or_error(
+            db, user.id, "zerodha",
+            missing_msg=ZERODHA_NOT_CONNECTED_MSG,
+            require_token=True,
+        )
+        broker_sync.require_portfolio(db, user.id, portfolio_id)
 
-        config = crud.get_broker_config_by_broker_name(db, user_id, "zerodha")
-        if not config or not config.access_token:
-            raise ValueError(
-                "Zerodha not connected. Please (re)connect Zerodha from the Brokers page and ensure "
-                "ZERODHA_REDIRECT_URL is set to http://localhost:8000/app/brokers."
-            )
-
-        portfolio = crud.get_portfolio_by_id(db, portfolio_id)
-        if not portfolio or portfolio.user_id != user_id:
-            raise ValueError("Portfolio not found")
-
-        # Decrypt access token and create broker instance
         try:
-            access_token = EncryptionManager.decrypt(config.access_token)
-            api_key = EncryptionManager.decrypt(config.api_key or "")
-            api_secret = EncryptionManager.decrypt(config.api_secret or "")
-            logger.info(f"✓ Credentials decrypted successfully for trades sync")
+            api_key, api_secret, access_token = broker_accounts.decrypt_credentials(config)
         except Exception as decrypt_error:
-            logger.error(f"✗ Failed to decrypt credentials: {str(decrypt_error)}")
             raise ValueError(f"Failed to decrypt Zerodha credentials: {str(decrypt_error)}")
 
-        # Log credential details for debugging (not the actual values)
-        logger.debug(f"📋 API key: length={len(api_key)}, non-empty={bool(api_key.strip())}")
-        logger.debug(f"📋 API secret: length={len(api_secret)}, non-empty={bool(api_secret.strip())}")
-        logger.debug(f"📋 Access token: length={len(access_token)}, non-empty={bool(access_token.strip())}")
-
-        logger.info(f"🔐 Creating ZerodhaBroker for trades sync")
         broker = ZerodhaBroker(api_key=api_key, api_secret=api_secret)
         broker.set_token(access_token)
-        
+
         if historical:
-            logger.info(f"🔐 Fetching HISTORICAL trades from Zerodha (using orders API)")
             trades = broker.get_historical_trades()
-            logger.info(f"✓ Successfully fetched {len(trades)} historical trades from Zerodha")
         else:
-            logger.info(f"🔐 Fetching recent trades from Zerodha")
             trades = broker.get_trades()
-            logger.info(f"✓ Successfully fetched {len(trades)} recent trades from Zerodha")
+        logger.info(f"Fetched {len(trades)} {'historical ' if historical else ''}trades from Zerodha")
 
-        if not trades:
-            logger.info(f"ℹ️  No trades found in Zerodha account")
+        imported = broker_sync.import_trades(db, portfolio_id, trades, source_label="Zerodha")
 
-        imported = 0
-        for idx, trade in enumerate(trades):
-            symbol = trade.get("tradingsymbol") or trade.get("symbol") or ""
-            if not symbol:
-                logger.debug(f"Trade {idx}: Skipping - no symbol found")
-                continue
-
-            tx_type_raw = trade.get("transaction_type") or trade.get("trade_type") or ""
-            tx_type = str(tx_type_raw).strip().lower()
-            if tx_type in {"buy", "b"}:
-                tx_type = "buy"
-            elif tx_type in {"sell", "s"}:
-                tx_type = "sell"
-            elif str(tx_type_raw).upper() in {"BUY", "SELL"}:
-                tx_type = str(tx_type_raw).lower()
-            else:
-                logger.debug(f"Trade {idx} ({symbol}): Skipping - invalid transaction type: {tx_type_raw}")
-                continue
-
-            quantity = trade.get("quantity") or 0
-            price = trade.get("average_price") or trade.get("price") or 0
-
-            logger.debug(f"Trade {idx}: {symbol} {tx_type} {quantity} @ {price}")
-
-            # Parse timestamp if available
-            ts = trade.get("exchange_timestamp") or trade.get("order_timestamp") or trade.get("trade_timestamp")
-            tx_dt = None
-            if isinstance(ts, datetime):
-                tx_dt = ts
-            elif isinstance(ts, str) and ts:
-                try:
-                    tx_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                except Exception:
-                    tx_dt = None
-            if tx_dt is None:
-                tx_dt = datetime.now(timezone.utc)
-            if tx_dt.tzinfo is None:
-                tx_dt = tx_dt.replace(tzinfo=timezone.utc)
-
-            # Ensure asset exists in the portfolio.
-            asset = (
-                db.query(AssetModel)
-                .filter(AssetModel.portfolio_id == portfolio_id, AssetModel.symbol == symbol)
-                .first()
-            )
-            if not asset:
-                asset = AssetModel(
-                    portfolio_id=portfolio_id,
-                    symbol=symbol,
-                    name=symbol,
-                    quantity=0,
-                    current_price=price or 0,
-                    purchase_price=price or 0,
-                )
-                db.add(asset)
-                db.commit()
-                db.refresh(asset)
-
-            # Avoid duplicates by matching key fields.
-            existing = (
-                db.query(TransactionModel)
-                .filter(
-                    TransactionModel.portfolio_id == portfolio_id,
-                    TransactionModel.asset_id == asset.id,
-                    TransactionModel.type == tx_type,
-                    TransactionModel.quantity == quantity,
-                    TransactionModel.price == price,
-                    TransactionModel.transaction_date == tx_dt,
-                )
-                .first()
-            )
-            if existing:
-                logger.debug(f"Trade {idx}: {symbol} - duplicate, skipping")
-                continue
-
-            note = trade.get("trade_id")
-            notes = f"Imported from Zerodha trade {note}" if note else "Imported from Zerodha"
-
-            logger.debug(f"Trade {idx}: Creating transaction for {symbol} {tx_type} {quantity} @ {price}")
-            tx = TransactionModel(
-                portfolio_id=portfolio_id,
-                asset_id=asset.id,
-                type=tx_type,
-                quantity=quantity,
-                price=price,
-                notes=notes,
-                transaction_date=tx_dt,
-            )
-            db.add(tx)
-            imported += 1
-
-        if imported:
-            db.commit()
-            logger.info(f"✓ Successfully imported {imported}/{len(trades)} trades")
-        else:
-            logger.info(f"ℹ️  No new trades to import (0/{len(trades)})")
-
-        crud.update_broker_config(db, config.id, last_synced=datetime.now(timezone.utc))
+        broker_configs.update_broker_config(db, config.id, last_synced=datetime.now(timezone.utc))
 
         return schemas.BrokerTransactionsSyncResponse(
             success=True,
@@ -563,7 +350,9 @@ def sync_zerodha_transactions(
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-# Angel Broker Endpoints
+
+# ── Angel ─────────────────────────────────────────────────────────────────────
+
 @router.post("/angel/setup")
 def setup_angel_broker(
     api_key: str = Query(...),
@@ -576,37 +365,19 @@ def setup_angel_broker(
     """Setup Angel broker with API credentials."""
     try:
         from portfolio_tracker.brokers.angel import AngelBroker
-        
-        user_id = user.id
-        
+
         # Test the credentials
         broker = AngelBroker(api_key=api_key, api_secret=api_secret)
         profile = broker.get_profile()
-        
-        # Save broker config with encrypted credentials
-        config = crud.get_broker_config_by_broker_name(db, user_id, "angel")
-        
-        if config:
-            config = crud.update_broker_config(
-                db,
-                config.id,
-                api_key=EncryptionManager.encrypt(api_key),
-                api_secret=EncryptionManager.encrypt(api_secret),
-                broker_user_id=profile.get("user_id", ""),
-                consent_given=consent_given,
-            )
-        else:
-            check_broker_limit(user, db)
-            config = crud.create_broker_config(
-                db,
-                user_id=user_id,
-                broker_name="angel",
-                broker_user_id=profile.get("user_id", ""),
-                api_key=EncryptionManager.encrypt(api_key),
-                api_secret=EncryptionManager.encrypt(api_secret),
-                consent_given=consent_given,
-            )
-        
+
+        broker_accounts.save_credentials(
+            db, user, "angel",
+            broker_user_id=profile.get("user_id", ""),
+            api_key=api_key,
+            api_secret=api_secret,
+            consent_given=consent_given,
+        )
+
         return {
             "success": True,
             "message": "Angel broker connected successfully"
@@ -628,65 +399,19 @@ def sync_angel_holdings(
     """Sync holdings from Angel to portfolio."""
     try:
         from portfolio_tracker.brokers.angel import AngelBroker
-        
-        user_id = user.id
-        
-        # Get broker config
-        config = crud.get_broker_config_by_broker_name(db, user_id, "angel")
-        if not config:
-            raise ValueError("Angel not connected")
-        
-        # Get portfolio
-        portfolio = crud.get_portfolio_by_id(db, portfolio_id)
-        if not portfolio or portfolio.user_id != user_id:
-            raise ValueError("Portfolio not found")
-        
-        # Decrypt credentials
-        api_key = EncryptionManager.decrypt(config.api_key or "")
-        api_secret = EncryptionManager.decrypt(config.api_secret or "")
-        
+
+        config = broker_accounts.get_config_or_error(
+            db, user.id, "angel", missing_msg="Angel not connected"
+        )
+        broker_sync.require_portfolio(db, user.id, portfolio_id)
+
+        api_key, api_secret, _ = broker_accounts.decrypt_credentials(config)
         broker = AngelBroker(api_key=api_key, api_secret=api_secret)
         holdings = broker.get_holdings()
-        
-        # Create or update assets
-        assets_imported = 0
-        for holding in holdings:
-            # Normalize symbol to Yahoo Finance format
-            normalized_symbol = symbol_mapper.normalize_broker_symbol(
-                symbol=holding.symbol,
-                exchange='NSE',
-                isin=holding.isin
-            )
-            
-            # Get company name from Yahoo Finance
-            company_name = symbol_mapper.get_company_name(normalized_symbol) or holding.symbol
-            
-            asset = db.query(AssetModel).filter(
-                AssetModel.portfolio_id == portfolio_id,
-                AssetModel.symbol == normalized_symbol
-            ).first()
-            
-            if not asset:
-                asset = AssetModel(
-                    portfolio_id=portfolio_id,
-                    symbol=normalized_symbol,
-                    name=company_name,
-                    quantity=holding.quantity,
-                    current_price=holding.current_price,
-                    purchase_price=holding.average_price,
-                )
-                db.add(asset)
-                assets_imported += 1
-            else:
-                asset.name = company_name
-                asset.quantity = holding.quantity
-                asset.current_price = holding.current_price
-                asset.purchase_price = holding.average_price
-            
-            db.commit()
-        
-        crud.update_broker_config(db, config.id)
-        
+
+        assets_imported = broker_sync.upsert_holdings(db, portfolio_id, holdings)
+        broker_configs.update_broker_config(db, config.id)
+
         return schemas.BrokerSyncResponse(
             success=True,
             message=f"Successfully synced {len(holdings)} holdings",
@@ -700,7 +425,24 @@ def sync_angel_holdings(
         )
 
 
-# 5Paisa Broker Endpoints
+# ── 5Paisa ────────────────────────────────────────────────────────────────────
+
+def _fivepaisa_client(config):
+    """Build a FivePaisaBroker from a stored (encrypted) config."""
+    from portfolio_tracker.brokers.fivepaisa import FivePaisaBroker
+
+    api_key, api_secret, _ = broker_accounts.decrypt_credentials(config)
+    extra = broker_accounts.load_extra_config(config)
+    return FivePaisaBroker(
+        api_key=api_key,
+        api_secret=api_secret,
+        app_name=extra.get("app_name", ""),
+        app_source=extra.get("app_source", ""),
+        user_id=extra.get("user_id", ""),
+        password=extra.get("password", ""),
+    )
+
+
 @router.post("/fivepaisa/setup")
 def setup_fivepaisa_broker(
     user_key: Optional[str] = Query(None, description="5Paisa User Key (VendorKey)"),
@@ -722,66 +464,38 @@ def setup_fivepaisa_broker(
     `user_key` / `encryption_key`) and makes the extra fields optional so tests
     that only supply `api_key`/`api_secret` continue to work.
     """
-    import json
-
     # Support legacy param names and provide sensible defaults for optional fields
     effective_user_key = user_key or api_key
     effective_encryption_key = encryption_key or api_secret
-    app_name = app_name or ""
-    app_source = app_source or ""
-    user_id_5p = user_id_5p or ""
-    password = password or ""
+    extra_config = {
+        "app_name": app_name or "",
+        "app_source": app_source or "",
+        "user_id": user_id_5p or "",
+        "password": password or "",
+    }
 
     try:
         from portfolio_tracker.brokers.fivepaisa import FivePaisaBroker
-
-        db_user_id = user.id
-
-        # Store extra config as encrypted JSON
-        extra_config = {
-            "app_name": app_name,
-            "app_source": app_source,
-            "user_id": user_id_5p,
-            "password": password,
-        }
-        encrypted_extra = EncryptionManager.encrypt(json.dumps(extra_config))
 
         # Test creating the broker (validates credentials format)
         broker = FivePaisaBroker(
             api_key=effective_user_key,
             api_secret=effective_encryption_key,
-            app_name=app_name,
-            app_source=app_source,
-            user_id=user_id_5p,
-            password=password,
+            app_name=extra_config["app_name"],
+            app_source=extra_config["app_source"],
+            user_id=extra_config["user_id"],
+            password=extra_config["password"],
         )
         profile = broker.get_profile()
 
-        # Save broker config with encrypted credentials
-        config = crud.get_broker_config_by_broker_name(db, db_user_id, "fivepaisa")
-
-        if config:
-            config = crud.update_broker_config(
-                db,
-                config.id,
-                api_key=EncryptionManager.encrypt(effective_user_key or ""),
-                api_secret=EncryptionManager.encrypt(effective_encryption_key or ""),
-                extra_config=encrypted_extra,
-                broker_user_id=profile.get("user_id", user_id_5p),
-                consent_given=consent_given,
-            )
-        else:
-            check_broker_limit(user, db)
-            config = crud.create_broker_config(
-                db,
-                user_id=db_user_id,
-                broker_name="fivepaisa",
-                broker_user_id=profile.get("user_id", user_id_5p),
-                api_key=EncryptionManager.encrypt(effective_user_key or ""),
-                api_secret=EncryptionManager.encrypt(effective_encryption_key or ""),
-                extra_config=encrypted_extra,
-                consent_given=consent_given,
-            )
+        broker_accounts.save_credentials(
+            db, user, "fivepaisa",
+            broker_user_id=profile.get("user_id", extra_config["user_id"]),
+            api_key=effective_user_key or "",
+            api_secret=effective_encryption_key or "",
+            extra_config=extra_config,
+            consent_given=consent_given,
+        )
 
         return {"success": True, "message": "5Paisa broker connected successfully"}
     except Exception as e:
@@ -798,38 +512,13 @@ def get_fivepaisa_login_url(
     db: Session = Depends(get_db),
 ):
     """Get 5Paisa OAuth login URL."""
-    import json
     try:
-        from portfolio_tracker.brokers.fivepaisa import FivePaisaBroker
-        
-        user_id = user.id
-        config = crud.get_broker_config_by_broker_name(db, user_id, "fivepaisa")
-        if not config:
-            raise ValueError("5Paisa not connected. Set up API credentials first.")
-        
-        api_key = EncryptionManager.decrypt(config.api_key or "")
-        api_secret = EncryptionManager.decrypt(config.api_secret or "")
-        
-        # Load extra config for 5Paisa
-        extra = {}
-        if config.extra_config:
-            try:
-                decrypted_extra = EncryptionManager.decrypt(config.extra_config)
-                extra = json.loads(decrypted_extra)
-            except Exception:
-                pass
-        
-        broker = FivePaisaBroker(
-            api_key=api_key,
-            api_secret=api_secret,
-            app_name=extra.get("app_name", ""),
-            app_source=extra.get("app_source", ""),
-            user_id=extra.get("user_id", ""),
-            password=extra.get("password", ""),
+        config = broker_accounts.get_config_or_error(
+            db, user.id, "fivepaisa",
+            missing_msg="5Paisa not connected. Set up API credentials first.",
         )
-        login_url = broker.get_login_url()
-        
-        return {"login_url": login_url}
+        broker = _fivepaisa_client(config)
+        return {"login_url": broker.get_login_url()}
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -845,60 +534,24 @@ def fivepaisa_oauth_callback(
     db: Session = Depends(get_db),
 ):
     """Complete 5Paisa OAuth flow with request token."""
-    import json
-    import logging
-    logger = logging.getLogger(__name__)
-    
     try:
-        from portfolio_tracker.brokers.fivepaisa import FivePaisaBroker
-        
-        user_id = user.id
-        config = crud.get_broker_config_by_broker_name(db, user_id, "fivepaisa")
-        if not config:
-            raise ValueError("5Paisa not connected. Set up API credentials first.")
-        
-        api_key = EncryptionManager.decrypt(config.api_key or "")
-        api_secret = EncryptionManager.decrypt(config.api_secret or "")
-        
-        # Load extra config for 5Paisa (app_name, app_source, user_id, password)
-        extra = {}
-        if config.extra_config:
-            try:
-                decrypted_extra = EncryptionManager.decrypt(config.extra_config)
-                extra = json.loads(decrypted_extra)
-            except Exception as e:
-                logger.warning(f"Failed to decrypt extra_config: {e}")
-        
-        logger.info(f"5Paisa callback: Creating broker with all 6 credentials")
-        broker = FivePaisaBroker(
-            api_key=api_key,
-            api_secret=api_secret,
-            app_name=extra.get("app_name", ""),
-            app_source=extra.get("app_source", ""),
-            user_id=extra.get("user_id", ""),
-            password=extra.get("password", ""),
+        config = broker_accounts.get_config_or_error(
+            db, user.id, "fivepaisa",
+            missing_msg="5Paisa not connected. Set up API credentials first.",
         )
-        
-        logger.info(f"5Paisa callback: Calling set_access_token with token length={len(request_token)}")
+        broker = _fivepaisa_client(config)
+
         access_token = broker.set_access_token(request_token)
-        
-        logger.info(f"5Paisa callback: Got access_token length={len(access_token) if access_token else 0}, client_code={broker.client_code}")
-        
         if not access_token:
             # Even if SDK fails, use the request_token as fallback
             logger.warning("5Paisa callback: access_token empty, using request_token as fallback")
             access_token = request_token
-        
-        # Save access token and client code to config
-        crud.update_broker_config(
-            db,
-            config.id,
-            access_token=EncryptionManager.encrypt(access_token),
-            broker_user_id=broker.client_code or config.broker_user_id
+
+        broker_accounts.store_access_token(
+            db, config, access_token,
+            broker_user_id=broker.client_code or config.broker_user_id,
         )
-        
-        logger.info(f"5Paisa callback: Saved config successfully")
-        
+
         return {
             "success": True,
             "message": "5Paisa authorization successful",
@@ -921,90 +574,22 @@ def sync_fivepaisa_holdings(
 ):
     """Sync holdings from 5Paisa to portfolio."""
     try:
-        import json
-
-        from portfolio_tracker.brokers.fivepaisa import FivePaisaBroker
-        
-        user_id = user.id
-        
-        # Get broker config
-        config = crud.get_broker_config_by_broker_name(db, user_id, "fivepaisa")
-        if not config:
-            raise ValueError("5Paisa not connected")
-        
-        # Check for access token
-        if not config.access_token:
-            raise ValueError("5Paisa not authorized. Please complete the login flow.")
-        
-        # Get portfolio
-        portfolio = crud.get_portfolio_by_id(db, portfolio_id)
-        if not portfolio or portfolio.user_id != user_id:
-            raise ValueError("Portfolio not found")
-        
-        # Decrypt credentials
-        api_key = EncryptionManager.decrypt(config.api_key or "")
-        api_secret = EncryptionManager.decrypt(config.api_secret or "")
-        access_token = EncryptionManager.decrypt(config.access_token)
-        
-        # Load extra config for 5Paisa (app_name, app_source, user_id, password)
-        extra = {}
-        if config.extra_config:
-            try:
-                decrypted_extra = EncryptionManager.decrypt(config.extra_config)
-                extra = json.loads(decrypted_extra)
-            except Exception as e:
-                logger.warning(f"Failed to decrypt extra_config: {e}")
-        
-        broker = FivePaisaBroker(
-            api_key=api_key,
-            api_secret=api_secret,
-            app_name=extra.get("app_name", ""),
-            app_source=extra.get("app_source", ""),
-            user_id=extra.get("user_id", ""),
-            password=extra.get("password", ""),
+        config = broker_accounts.get_config_or_error(
+            db, user.id, "fivepaisa",
+            missing_msg="5Paisa not connected",
+            require_token=True,
+            unauthorized_msg="5Paisa not authorized. Please complete the login flow.",
         )
+        broker_sync.require_portfolio(db, user.id, portfolio_id)
+
+        _, _, access_token = broker_accounts.decrypt_credentials(config)
+        broker = _fivepaisa_client(config)
         broker.set_token(access_token, config.broker_user_id)
         holdings = broker.get_holdings()
-        
-        # Create or update assets
-        assets_imported = 0
-        for holding in holdings:
-            # Normalize symbol to Yahoo Finance format
-            normalized_symbol = symbol_mapper.normalize_broker_symbol(
-                symbol=holding.symbol,
-                exchange='NSE',
-                isin=holding.isin
-            )
-            
-            # Get company name from Yahoo Finance
-            company_name = symbol_mapper.get_company_name(normalized_symbol) or holding.symbol
-            
-            asset = db.query(AssetModel).filter(
-                AssetModel.portfolio_id == portfolio_id,
-                AssetModel.symbol == normalized_symbol
-            ).first()
-            
-            if not asset:
-                asset = AssetModel(
-                    portfolio_id=portfolio_id,
-                    symbol=normalized_symbol,
-                    name=company_name,
-                    quantity=holding.quantity,
-                    current_price=holding.current_price,
-                    purchase_price=holding.average_price,
-                )
-                db.add(asset)
-                assets_imported += 1
-            else:
-                asset.name = company_name
-                asset.quantity = holding.quantity
-                asset.current_price = holding.current_price
-                asset.purchase_price = holding.average_price
-            
-            db.commit()
-        
-        crud.update_broker_config(db, config.id)
-        
+
+        assets_imported = broker_sync.upsert_holdings(db, portfolio_id, holdings)
+        broker_configs.update_broker_config(db, config.id)
+
         return schemas.BrokerSyncResponse(
             success=True,
             message=f"Successfully synced {len(holdings)} holdings",
@@ -1018,7 +603,7 @@ def sync_fivepaisa_holdings(
         )
 
 
-# ── Dhan Broker Endpoints ─────────────────────────────────────────────────────
+# ── Dhan ──────────────────────────────────────────────────────────────────────
 
 @router.post("/dhan/setup")
 def setup_dhan_broker(
@@ -1033,31 +618,16 @@ def setup_dhan_broker(
     try:
         from portfolio_tracker.brokers.dhan import DhanBroker
 
-        user_id = user.id
         broker = DhanBroker(client_id=client_id, access_token=access_token)
         profile = broker.get_profile()
 
-        config = crud.get_broker_config_by_broker_name(db, user_id, "dhan")
-        if config:
-            config = crud.update_broker_config(
-                db,
-                config.id,
-                api_key=EncryptionManager.encrypt(client_id),
-                access_token=EncryptionManager.encrypt(access_token),
-                broker_user_id=profile.get("user_id", client_id),
-                consent_given=consent_given,
-            )
-        else:
-            check_broker_limit(user, db)
-            config = crud.create_broker_config(
-                db,
-                user_id=user_id,
-                broker_name="dhan",
-                broker_user_id=profile.get("user_id", client_id),
-                api_key=EncryptionManager.encrypt(client_id),
-                access_token=EncryptionManager.encrypt(access_token),
-                consent_given=consent_given,
-            )
+        config = broker_accounts.save_credentials(
+            db, user, "dhan",
+            broker_user_id=profile.get("user_id", client_id),
+            api_key=client_id,
+            access_token=access_token,
+            consent_given=consent_given,
+        )
 
         return {
             "success": True,
@@ -1082,55 +652,19 @@ def sync_dhan_holdings(
     try:
         from portfolio_tracker.brokers.dhan import DhanBroker
 
-        user_id = user.id
-        config = crud.get_broker_config_by_broker_name(db, user_id, "dhan")
-        if not config or not config.access_token:
-            raise ValueError("Dhan not connected. Please connect Dhan from the Brokers page.")
+        config = broker_accounts.get_config_or_error(
+            db, user.id, "dhan",
+            missing_msg="Dhan not connected. Please connect Dhan from the Brokers page.",
+            require_token=True,
+        )
+        broker_sync.require_portfolio(db, user.id, portfolio_id)
 
-        portfolio = crud.get_portfolio_by_id(db, portfolio_id)
-        if not portfolio or portfolio.user_id != user_id:
-            raise ValueError("Portfolio not found")
-
-        client_id = EncryptionManager.decrypt(config.api_key or "")
-        access_token = EncryptionManager.decrypt(config.access_token)
-
+        client_id, _, access_token = broker_accounts.decrypt_credentials(config)
         broker = DhanBroker(client_id=client_id, access_token=access_token)
         holdings = broker.get_holdings()
 
-        assets_imported = 0
-        for holding in holdings:
-            normalized_symbol = symbol_mapper.normalize_broker_symbol(
-                symbol=holding.symbol,
-                exchange="NSE",
-                isin=holding.isin,
-            )
-            company_name = symbol_mapper.get_company_name(normalized_symbol) or holding.symbol
-
-            asset = db.query(AssetModel).filter(
-                AssetModel.portfolio_id == portfolio_id,
-                AssetModel.symbol == normalized_symbol,
-            ).first()
-
-            if not asset:
-                asset = AssetModel(
-                    portfolio_id=portfolio_id,
-                    symbol=normalized_symbol,
-                    name=company_name,
-                    quantity=holding.quantity,
-                    current_price=holding.current_price,
-                    purchase_price=holding.average_price,
-                )
-                db.add(asset)
-                assets_imported += 1
-            else:
-                asset.name = company_name
-                asset.quantity = holding.quantity
-                asset.current_price = holding.current_price
-                asset.purchase_price = holding.average_price
-
-            db.commit()
-
-        crud.update_broker_config(db, config.id)
+        assets_imported = broker_sync.upsert_holdings(db, portfolio_id, holdings)
+        broker_configs.update_broker_config(db, config.id)
 
         return schemas.BrokerSyncResponse(
             success=True,
@@ -1144,7 +678,7 @@ def sync_dhan_holdings(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-# ── Groww Broker Endpoints ────────────────────────────────────────────────────
+# ── Groww ─────────────────────────────────────────────────────────────────────
 
 @router.post("/groww/setup")
 def setup_groww_broker(
@@ -1159,30 +693,15 @@ def setup_groww_broker(
     try:
         from portfolio_tracker.brokers.groww import GrowwBroker
 
-        user_id = user.id
         broker = GrowwBroker(api_key=api_key, api_secret=api_secret)
         login_url = broker.get_login_url()
 
-        config = crud.get_broker_config_by_broker_name(db, user_id, "groww")
-        if config:
-            config = crud.update_broker_config(
-                db,
-                config.id,
-                api_key=EncryptionManager.encrypt(api_key),
-                api_secret=EncryptionManager.encrypt(api_secret),
-                consent_given=consent_given,
-            )
-        else:
-            check_broker_limit(user, db)
-            config = crud.create_broker_config(
-                db,
-                user_id=user_id,
-                broker_name="groww",
-                broker_user_id="",
-                api_key=EncryptionManager.encrypt(api_key),
-                api_secret=EncryptionManager.encrypt(api_secret),
-                consent_given=consent_given,
-            )
+        config = broker_accounts.save_credentials(
+            db, user, "groww",
+            api_key=api_key,
+            api_secret=api_secret,
+            consent_given=consent_given,
+        )
 
         return {
             "success": True,
@@ -1207,13 +726,11 @@ def get_groww_login_url(
     try:
         from portfolio_tracker.brokers.groww import GrowwBroker
 
-        user_id = user.id
-        config = crud.get_broker_config_by_broker_name(db, user_id, "groww")
+        config = broker_configs.get_broker_config_by_broker_name(db, user.id, "groww")
         if not config or not config.api_key:
             raise ValueError("Groww not configured. Please save API credentials first.")
 
-        api_key = EncryptionManager.decrypt(config.api_key)
-        api_secret = EncryptionManager.decrypt(config.api_secret or "")
+        api_key, api_secret, _ = broker_accounts.decrypt_credentials(config)
         broker = GrowwBroker(api_key=api_key, api_secret=api_secret)
         return {"login_url": broker.get_login_url(), "broker": "groww"}
     except HTTPException:
@@ -1233,21 +750,18 @@ def groww_callback(
     try:
         from portfolio_tracker.brokers.groww import GrowwBroker
 
-        user_id = user.id
-        config = crud.get_broker_config_by_broker_name(db, user_id, "groww")
-        if not config:
-            raise ValueError("Groww config not found. Please save API credentials first.")
+        config = broker_accounts.get_config_or_error(
+            db, user.id, "groww",
+            missing_msg="Groww config not found. Please save API credentials first.",
+        )
 
-        api_key = EncryptionManager.decrypt(config.api_key or "")
-        api_secret = EncryptionManager.decrypt(config.api_secret or "")
+        api_key, api_secret, _ = broker_accounts.decrypt_credentials(config)
         broker = GrowwBroker(api_key=api_key, api_secret=api_secret)
         access_token = broker.set_access_token(request_token)
         profile = broker.get_profile()
 
-        crud.update_broker_config(
-            db,
-            config.id,
-            access_token=EncryptionManager.encrypt(access_token),
+        broker_accounts.store_access_token(
+            db, config, access_token,
             broker_user_id=profile.get("user_id", ""),
         )
 
@@ -1272,57 +786,20 @@ def sync_groww_holdings(
     try:
         from portfolio_tracker.brokers.groww import GrowwBroker
 
-        user_id = user.id
-        config = crud.get_broker_config_by_broker_name(db, user_id, "groww")
-        if not config or not config.access_token:
-            raise ValueError("Groww not connected. Please authorize via the Brokers page.")
+        config = broker_accounts.get_config_or_error(
+            db, user.id, "groww",
+            missing_msg="Groww not connected. Please authorize via the Brokers page.",
+            require_token=True,
+        )
+        broker_sync.require_portfolio(db, user.id, portfolio_id)
 
-        portfolio = crud.get_portfolio_by_id(db, portfolio_id)
-        if not portfolio or portfolio.user_id != user_id:
-            raise ValueError("Portfolio not found")
-
-        api_key = EncryptionManager.decrypt(config.api_key or "")
-        api_secret = EncryptionManager.decrypt(config.api_secret or "")
-        access_token = EncryptionManager.decrypt(config.access_token)
-
+        api_key, api_secret, access_token = broker_accounts.decrypt_credentials(config)
         broker = GrowwBroker(api_key=api_key, api_secret=api_secret)
         broker.set_token(access_token)
         holdings = broker.get_holdings()
 
-        assets_imported = 0
-        for holding in holdings:
-            normalized_symbol = symbol_mapper.normalize_broker_symbol(
-                symbol=holding.symbol,
-                exchange="NSE",
-                isin=holding.isin,
-            )
-            company_name = symbol_mapper.get_company_name(normalized_symbol) or holding.symbol
-
-            asset = db.query(AssetModel).filter(
-                AssetModel.portfolio_id == portfolio_id,
-                AssetModel.symbol == normalized_symbol,
-            ).first()
-
-            if not asset:
-                asset = AssetModel(
-                    portfolio_id=portfolio_id,
-                    symbol=normalized_symbol,
-                    name=company_name,
-                    quantity=holding.quantity,
-                    current_price=holding.current_price,
-                    purchase_price=holding.average_price,
-                )
-                db.add(asset)
-                assets_imported += 1
-            else:
-                asset.name = company_name
-                asset.quantity = holding.quantity
-                asset.current_price = holding.current_price
-                asset.purchase_price = holding.average_price
-
-            db.commit()
-
-        crud.update_broker_config(db, config.id)
+        assets_imported = broker_sync.upsert_holdings(db, portfolio_id, holdings)
+        broker_configs.update_broker_config(db, config.id)
 
         return schemas.BrokerSyncResponse(
             success=True,

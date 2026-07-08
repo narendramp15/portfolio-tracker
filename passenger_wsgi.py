@@ -41,6 +41,7 @@ from portfolio_tracker.main import app  # FastAPI / Starlette ASGI app
 # If asgiref is not available we fall back to a simple ASGI-to-WSGI shim.
 try:
     from asgiref.wsgi import WsgiToAsgi  # type: ignore
+
     # asgiref's adapter goes the other way; use the ASGI app directly with
     # a helper that bridges synchronously.
     # Actually use the correct asgiref wrapper: AsgiHandler / run_asgi_threaded
