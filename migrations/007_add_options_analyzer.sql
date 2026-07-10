@@ -2,7 +2,7 @@
 -- Run with: psql $DATABASE_URL -f migrations/007_add_options_analyzer.sql
 
 ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS options_tier VARCHAR(20) NOT NULL DEFAULT 'starter',
+    ADD COLUMN IF NOT EXISTS options_tier VARCHAR(20) NOT NULL DEFAULT 'free',
     ADD COLUMN IF NOT EXISTS options_credits INTEGER NOT NULL DEFAULT 5,
     ADD COLUMN IF NOT EXISTS options_analyses_today INTEGER NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS options_analyses_date VARCHAR(10),

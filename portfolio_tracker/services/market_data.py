@@ -65,7 +65,7 @@ class MarketDataService:
             # Use fast_info for quicker price lookup
             try:
                 return float(ticker.fast_info['lastPrice'])
-            except:
+            except Exception:
                 # Fallback to regular info
                 info = ticker.info
                 return info.get('regularMarketPrice') or info.get('currentPrice')
@@ -278,7 +278,8 @@ class MarketDataService:
             ticker = yf.Ticker(symbol)
             info = ticker.info
             return 'regularMarketPrice' in info or 'currentPrice' in info
-        except:
+        except Exception as e:
+            logger.warning(f"Symbol validation failed for {symbol}: {e}")
             return False
 
 

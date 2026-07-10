@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form'
 import { BarChart3 } from 'lucide-react'
 
 import { useAuth } from '../../providers/auth/AuthProvider'
+import { api } from '../../lib/api'
 
 const schema = z.object({
   email: z.string().email(),
@@ -44,13 +45,7 @@ export function LoginPage() {
     setResetMessage(null)
 
     try {
-      const response = await fetch('/api/auth/forgot-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: resetEmail }),
-      })
-
-      const data = await response.json()
+      const { data } = await api.post('/auth/forgot-password', { email: resetEmail })
       setResetMessage(data.message || 'Reset instructions sent! Check the console for the token (dev mode).')
     } catch (err) {
       setResetMessage('Failed to send reset request. Please try again.')

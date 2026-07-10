@@ -1,5 +1,6 @@
 """Zerodha KiteConnect broker integration."""
 
+import logging
 import os
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -8,6 +9,8 @@ from typing import Any, List, Optional
 from kiteconnect import KiteConnect
 
 from portfolio_tracker.schemas import BrokerHolding
+
+logger = logging.getLogger(__name__)
 
 
 class ZerodhaBroker:
@@ -85,13 +88,29 @@ class ZerodhaBroker:
             holdings = []
 
             for holding in holdings_data:
+                quantity = Decimal(str(holding.get("quantity", 0) or 0))
+                # Kite returns fully-sold / T1 rows with quantity 0; BrokerHolding
+                # enforces quantity > 0, so skip them instead of aborting the sync.
+                if quantity <= 0:
+                    continue
+
+                avg_price = Decimal(str(holding.get("average_price", 0) or 0))
+                last_price = Decimal(str(holding.get("last_price", 0) or 0))
+                # BrokerHolding requires prices > 0; fall back to the other price
+                # field when one is missing rather than raising on the whole batch.
+                avg_price = avg_price if avg_price > 0 else last_price
+                last_price = last_price if last_price > 0 else avg_price
+                if avg_price <= 0 or last_price <= 0:
+                    logger.warning("Skipping Zerodha holding %s: no usable price", holding.get("tradingsymbol"))
+                    continue
+
                 broker_holding = BrokerHolding(
                     symbol=holding.get("tradingsymbol", ""),
                     isin=holding.get("isin"),
-                    quantity=Decimal(str(holding.get("quantity", 0))),
-                    average_price=Decimal(str(holding.get("average_price", 0))),
-                    current_price=Decimal(str(holding.get("last_price", 0))),
-                    last_price=Decimal(str(holding.get("last_price", 0))),
+                    quantity=quantity,
+                    average_price=avg_price,
+                    current_price=last_price,
+                    last_price=last_price,
                 )
                 holdings.append(broker_holding)
 

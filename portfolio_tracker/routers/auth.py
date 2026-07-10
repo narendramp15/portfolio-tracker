@@ -330,10 +330,14 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
             url=f"{settings.FRONTEND_URL}/auth/callback?token={access_token}"
         )
         
+    except HTTPException:
+        # Preserve explicit guard responses (e.g. missing email/userinfo → 400)
+        # with their intended status code instead of masking them as a redirect.
+        raise
     except Exception as e:
         # Log the actual error for debugging
         logger.error(f"Google OAuth error: {type(e).__name__}: {str(e)}", exc_info=True)
-        
+
         # Redirect to login with error
         return RedirectResponse(
             url=f"{settings.FRONTEND_URL}/login?error=google_auth_failed"

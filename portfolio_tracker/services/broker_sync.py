@@ -119,10 +119,18 @@ def import_trades(
     """
     imported = 0
     for idx, trade in enumerate(trades):
-        symbol = trade.get("tradingsymbol") or trade.get("symbol") or ""
-        if not symbol:
+        raw_symbol = trade.get("tradingsymbol") or trade.get("symbol") or ""
+        if not raw_symbol:
             logger.debug(f"Trade {idx}: Skipping - no symbol found")
             continue
+
+        # Normalize to Yahoo Finance format so trade imports and holdings syncs
+        # resolve to the SAME asset row (upsert_holdings uses the same mapper).
+        symbol = symbol_mapper.normalize_broker_symbol(
+            symbol=raw_symbol,
+            exchange=trade.get("exchange") or "NSE",
+            isin=trade.get("isin"),
+        )
 
         tx_type = _normalize_trade_type(trade)
         if tx_type is None:
@@ -139,7 +147,7 @@ def import_trades(
             asset = AssetModel(
                 portfolio_id=portfolio_id,
                 symbol=symbol,
-                name=symbol,
+                name=symbol_mapper.get_company_name(symbol) or raw_symbol,
                 quantity=0,
                 current_price=price or 0,
                 purchase_price=price or 0,

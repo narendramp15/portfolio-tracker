@@ -5,6 +5,8 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { BarChart3, CheckCircle2 } from 'lucide-react'
 
+import { api } from '../../lib/api'
+
 const schema = z.object({
     token: z.string().min(1, 'Token is required'),
     new_password: z.string().min(8, 'Password must be at least 8 characters'),
@@ -35,27 +37,17 @@ export function ResetPasswordPage() {
         setError(null)
 
         try {
-            const response = await fetch('/api/auth/reset-password', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    token: values.token,
-                    new_password: values.new_password,
-                }),
+            await api.post('/auth/reset-password', {
+                token: values.token,
+                new_password: values.new_password,
             })
-
-            const data = await response.json()
-
-            if (!response.ok) {
-                throw new Error(data.detail || 'Failed to reset password')
-            }
 
             setSuccess(true)
             setTimeout(() => {
                 navigate('/login')
             }, 3000)
         } catch (err: any) {
-            setError(err.message || 'Failed to reset password. Please try again.')
+            setError(err?.response?.data?.detail || err.message || 'Failed to reset password. Please try again.')
         }
     }
 

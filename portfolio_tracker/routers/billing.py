@@ -11,13 +11,14 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from portfolio_tracker.database import get_db
 from portfolio_tracker.deps import (PLAN_LIMITS, check_broker_limit,
                                     get_current_user,
                                     get_export_count_this_month)
-from portfolio_tracker.models import UserModel
+from portfolio_tracker.models import ProcessedPaymentModel, UserModel
 
 logger = logging.getLogger(__name__)
 
@@ -326,6 +327,12 @@ _CREDIT_PACKS: dict[str, tuple[int, int]] = {
 }
 
 
+# Admin/dev override for options_tier WITHOUT payment. Disabled by default so it
+# can never hand out paid tiers in production; the real paid path is
+# /options-starter-activate (verified) and Razorpay recurring for pro/elite.
+ALLOW_TIER_OVERRIDE = os.getenv("ALLOW_OPTIONS_TIER_OVERRIDE", "").lower() in ("1", "true", "yes")
+
+
 @router.post("/options-upgrade")
 def options_upgrade(
     payload: dict,
@@ -333,15 +340,24 @@ def options_upgrade(
     db: Session = Depends(get_db),
 ) -> dict:
     """
-    Immediately upgrades the user's options_tier (no payment — billing handled
-    via Razorpay recurring outside this flow, or as a simple admin override).
-    For production, integrate a real payment check before applying.
+    Admin/dev-only tier override. No payment is taken, so it is gated behind
+    ALLOW_OPTIONS_TIER_OVERRIDE and returns 403 unless explicitly enabled.
+    Paid upgrades must go through the verified Razorpay flows.
     """
+    if not ALLOW_TIER_OVERRIDE:
+        raise HTTPException(
+            status_code=403,
+            detail="Tier upgrades must be completed through the payment flow.",
+        )
+
     target_tier: str = payload.get("tier", "")
     if target_tier not in _OPTIONS_TIERS:
         raise HTTPException(status_code=400, detail=f"Invalid tier '{target_tier}'. Must be one of {_OPTIONS_TIERS}.")
 
-    current_idx = _OPTIONS_TIERS.index(getattr(user, "options_tier", "starter"))
+    # Users start at 'free' (not in _OPTIONS_TIERS), so treat any unknown/unset
+    # current tier as below the lowest paid tier instead of crashing on .index().
+    current_tier = getattr(user, "options_tier", None) or "free"
+    current_idx = _OPTIONS_TIERS.index(current_tier) if current_tier in _OPTIONS_TIERS else -1
     target_idx = _OPTIONS_TIERS.index(target_tier)
     if target_idx <= current_idx:
         raise HTTPException(status_code=400, detail="Cannot downgrade tier via this endpoint.")
@@ -522,7 +538,9 @@ def verify_options_credits_payment(
     if pack_id not in _CREDIT_PACKS:
         raise HTTPException(status_code=400, detail=f"Unknown pack '{pack_id}'.")
 
-    # Verify HMAC-SHA256 signature
+    credits_to_add, price_paise = _CREDIT_PACKS[pack_id]
+
+    # Verify HMAC-SHA256 signature (proves order_id/payment_id came from Razorpay).
     expected = hmac.new(
         RAZORPAY_KEY_SECRET.encode(),
         f"{order_id}|{payment_id}".encode(),
@@ -531,8 +549,43 @@ def verify_options_credits_payment(
     if not hmac.compare_digest(expected, signature):
         raise HTTPException(status_code=400, detail="Payment signature verification failed.")
 
-    credits_to_add, _ = _CREDIT_PACKS[pack_id]
+    # Guard against pack escalation: pack_id is NOT part of the signed payload, so
+    # confirm the order was actually created for this pack's price server-side.
+    try:
+        import razorpay  # type: ignore[import]
+        client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+        order = client.order.fetch(order_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Razorpay order fetch failed for %s: %s", order_id, exc)
+        raise HTTPException(status_code=502, detail="Could not verify order with payment gateway.") from exc
+
+    if int(order.get("amount", 0)) != price_paise:
+        logger.warning(
+            "Order %s amount %s does not match pack %s price %d — rejecting",
+            order_id, order.get("amount"), pack_id, price_paise,
+        )
+        raise HTTPException(status_code=400, detail="Payment amount does not match the selected pack.")
+    if order.get("status") != "paid":
+        raise HTTPException(status_code=400, detail="Order is not marked paid yet. Please retry shortly.")
+
+    # Idempotency / replay guard: record the payment first, keyed on a UNIQUE
+    # payment_id. A repeated verify for the same payment loses the race here and
+    # is rejected before any credits are granted.
+    db.add(ProcessedPaymentModel(
+        user_id=user.id,
+        payment_id=payment_id,
+        order_id=order_id,
+        purpose="options_credits",
+        pack_id=pack_id,
+        amount_paise=price_paise,
+    ))
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="This payment has already been processed.")
+
     user.options_credits = (getattr(user, "options_credits", 0) or 0) + credits_to_add  # type: ignore[assignment]
     db.commit()
-    logger.info("Verified payment — added %d credits to user %d", credits_to_add, user.id)
+    logger.info("Verified payment %s — added %d credits to user %d", payment_id, credits_to_add, user.id)
     return {"success": True, "credits_added": credits_to_add}

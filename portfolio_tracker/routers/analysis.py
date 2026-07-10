@@ -211,7 +211,9 @@ def generate_ai_recommendation(symbol: str, name: str, indicators: dict, current
 
 
 @router.get("/analysis", response_model=List[schemas.TechnicalAnalysis])
-async def get_technical_analysis(
+# Sync `def` so FastAPI runs this in its threadpool: the yfinance fetches below
+# are blocking, and an `async def` would stall the whole event loop per call.
+def get_technical_analysis(
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -278,7 +280,8 @@ async def get_technical_analysis(
 
 
 @router.get("/analysis/{asset_id}", response_model=schemas.TechnicalAnalysis)
-async def get_asset_analysis(
+# Sync `def` (threadpool) — the yfinance history fetch below is blocking.
+def get_asset_analysis(
     asset_id: int,
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db)

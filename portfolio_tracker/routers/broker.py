@@ -60,6 +60,8 @@ def get_broker_configs(
         ]
     except HTTPException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -82,6 +84,8 @@ def delete_broker_config(
 
         broker_configs.delete_broker_config(db, config_id)
         return {"success": True, "message": "Broker config deleted"}
+    except HTTPException:
+        raise
     except HTTPException:
         raise
     except Exception as e:
@@ -121,6 +125,8 @@ def setup_zerodha_broker(
             "message": "Zerodha API credentials saved. Please login to authorize.",
             "config_id": config.id
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -170,6 +176,8 @@ def zerodha_callback(
             "message": "Zerodha broker connected successfully",
             "broker_user_id": broker_user_id
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -198,6 +206,8 @@ def get_zerodha_login_url(
 
         login_url = broker.get_login_url()
         return {"login_url": login_url, "broker": "zerodha"}
+    except HTTPException:
+        raise
     except HTTPException:
         raise
     except Exception as e:
@@ -297,6 +307,8 @@ def sync_zerodha_holdings(
         )
     except HTTPException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -347,6 +359,8 @@ def sync_zerodha_transactions(
         )
     except HTTPException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -382,6 +396,8 @@ def setup_angel_broker(
             "success": True,
             "message": "Angel broker connected successfully"
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -418,6 +434,8 @@ def sync_angel_holdings(
             holdings_count=len(holdings),
             assets_imported=assets_imported
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -498,6 +516,8 @@ def setup_fivepaisa_broker(
         )
 
         return {"success": True, "message": "5Paisa broker connected successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -519,6 +539,8 @@ def get_fivepaisa_login_url(
         )
         broker = _fivepaisa_client(config)
         return {"login_url": broker.get_login_url()}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -543,9 +565,14 @@ def fivepaisa_oauth_callback(
 
         access_token = broker.set_access_token(request_token)
         if not access_token:
-            # Even if SDK fails, use the request_token as fallback
-            logger.warning("5Paisa callback: access_token empty, using request_token as fallback")
-            access_token = request_token
+            # Token exchange failed. Do NOT persist the one-time request_token as
+            # the access token — that would mark the broker "authorized" with an
+            # unusable credential and every later sync would fail opaquely.
+            logger.error("5Paisa callback: token exchange returned no access token")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="5Paisa authorization failed: could not obtain an access token. Please try logging in again.",
+            )
 
         broker_accounts.store_access_token(
             db, config, access_token,
@@ -557,6 +584,8 @@ def fivepaisa_oauth_callback(
             "message": "5Paisa authorization successful",
             "client_code": broker.client_code
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"5Paisa callback error: {str(e)}")
         raise HTTPException(
@@ -596,6 +625,8 @@ def sync_fivepaisa_holdings(
             holdings_count=len(holdings),
             assets_imported=assets_imported
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -634,6 +665,8 @@ def setup_dhan_broker(
             "message": "Dhan broker connected successfully",
             "config_id": config.id,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -674,6 +707,8 @@ def sync_dhan_holdings(
         )
     except HTTPException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -709,6 +744,8 @@ def setup_groww_broker(
             "message": "Groww credentials saved. Please complete OAuth authorization.",
             "config_id": config.id,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -733,6 +770,8 @@ def get_groww_login_url(
         api_key, api_secret, _ = broker_accounts.decrypt_credentials(config)
         broker = GrowwBroker(api_key=api_key, api_secret=api_secret)
         return {"login_url": broker.get_login_url(), "broker": "groww"}
+    except HTTPException:
+        raise
     except HTTPException:
         raise
     except Exception as e:
@@ -766,6 +805,8 @@ def groww_callback(
         )
 
         return {"success": True, "message": "Groww broker connected successfully"}
+    except HTTPException:
+        raise
     except HTTPException:
         raise
     except Exception as e:
@@ -807,6 +848,8 @@ def sync_groww_holdings(
             holdings_count=len(holdings),
             assets_imported=assets_imported,
         )
+    except HTTPException:
+        raise
     except HTTPException:
         raise
     except Exception as e:

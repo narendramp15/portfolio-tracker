@@ -15,7 +15,8 @@ router = APIRouter()
 
 
 @router.get("/search")
-async def search_stocks(
+# Sync `def` (threadpool): search_stocks does blocking yfinance lookups.
+def search_stocks(
     q: str,
     market: str = 'IN',
     user: UserModel = Depends(get_current_user)
@@ -76,7 +77,8 @@ async def validate_symbol(
 
 
 @router.post("/portfolios/{portfolio_id}/refresh-prices")
-async def refresh_portfolio_prices(
+# Sync `def` (threadpool): the per-asset get_stock_info calls below are blocking.
+def refresh_portfolio_prices(
     portfolio_id: int,
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db)

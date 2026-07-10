@@ -14,7 +14,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -22,6 +21,7 @@ from sqlalchemy.orm import Session
 from portfolio_tracker.database import get_db
 from portfolio_tracker.deps import get_current_user
 from portfolio_tracker.models import StockThesisCacheModel, UserModel
+from portfolio_tracker.services.anthropic_client import call_anthropic
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -29,8 +29,6 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # Anthropic config for AI thesis generation
 # ---------------------------------------------------------------------------
-_ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
-_ANTHROPIC_VERSION = "2023-06-01"
 _THESIS_MODEL = os.getenv("MODEL_PRO", "claude-sonnet-4-6")
 _THESIS_CACHE_HOURS = 24  # re-generate thesis after 24 hours
 
@@ -613,33 +611,15 @@ async def get_stock_thesis(
         raise HTTPException(status_code=503, detail="AI service is not configured on this server.")
 
     user_msg = _build_thesis_prompt(stock_result)
-    payload = {
-        "model": _THESIS_MODEL,
-        "max_tokens": 400,
-        "system": [{"type": "text", "text": _THESIS_SYSTEM, "cache_control": {"type": "ephemeral"}}],
-        "messages": [{"role": "user", "content": user_msg}],
-    }
-    headers = {
-        "x-api-key": api_key,
-        "anthropic-version": _ANTHROPIC_VERSION,
-        "content-type": "application/json",
-        "anthropic-beta": "prompt-caching-2024-07-31",
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(_ANTHROPIC_API_URL, json=payload, headers=headers)
-        data = resp.json()
-        if resp.status_code != 200:
-            err = data.get("error", {}).get("message", "Unknown error")
-            logger.error("Thesis AI error %s: %s", resp.status_code, err)
-            raise HTTPException(status_code=502, detail="AI service error. Please try again.")
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="AI request timed out. Please try again.")
-
-    thesis_text = "".join(
-        block.get("text", "") for block in data.get("content", []) if isinstance(block, dict)
-    ) or "No thesis generated."
+    thesis_text, _usage = await call_anthropic(
+        api_key=api_key,
+        model=_THESIS_MODEL,
+        system_text=_THESIS_SYSTEM,
+        user_msg=user_msg,
+        max_tokens=400,
+        timeout=30.0,
+    )
+    thesis_text = thesis_text or "No thesis generated."
 
     # 6. Upsert into DB cache
     now_utc = datetime.now(timezone.utc)

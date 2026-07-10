@@ -31,29 +31,57 @@ class TaxCalculator:
     LTCG_EXEMPTION = Decimal("125000")  # ₹1,25,000 exemption per financial year (increased from ₹1L)
     
     @staticmethod
+    def _to_naive(dt):
+        """Drop tzinfo so naive (manual) and aware (imported) dates compare/subtract."""
+        if dt is None:
+            return None
+        return dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
+
+    @staticmethod
+    def _fy_bounds(financial_year: Optional[str]):
+        """Return naive (start, end) datetimes for an Indian FY string, or None."""
+        if not financial_year:
+            return None
+        fy = financial_year.replace('FY', '').strip()
+        start_year, end_year = map(int, fy.split('-'))
+        if end_year < 100:
+            end_year = 2000 + end_year
+        if start_year < 100:
+            start_year = 2000 + start_year
+        return datetime(start_year, 4, 1), datetime(end_year, 3, 31, 23, 59, 59)
+
+    @staticmethod
     def calculate_capital_gains(
         transactions: List,
         method: str = 'FIFO',
-        include_unrealized: bool = False
+        include_unrealized: bool = False,
+        financial_year: Optional[str] = None
     ) -> Dict:
         """
         Calculate realized and optionally unrealized capital gains.
-        
+
         Args:
-            transactions: List of TransactionModel objects with asset relationship
+            transactions: List of TransactionModel objects with asset relationship.
+                Pass the FULL history (all financial years); do NOT pre-filter by
+                FY, or already-consumed FIFO lots will be mismatched.
             method: 'FIFO' (First In First Out) or 'LIFO' (Last In First Out)
             include_unrealized: Whether to include unrealized gains from current holdings
-        
+            financial_year: Optional FY (e.g. "2024-25"). When given, FIFO still runs
+                over the entire history but only sells settled within that FY are
+                aggregated into the reported gains.
+
         Returns:
             Dict with comprehensive tax report including STCG/LTCG breakdown by symbol
         """
+        fy_bounds = TaxCalculator._fy_bounds(financial_year)
+
         # Group transactions by symbol
         symbol_txns = defaultdict(list)
         for txn in transactions:
             if not hasattr(txn, 'asset') or not txn.asset:
                 continue
             symbol_txns[txn.asset.symbol].append(txn)
-        
+
         results = {}
         summary = {
             'total_stcg': Decimal("0"),
@@ -65,7 +93,7 @@ class TaxCalculator:
         }
         
         for symbol, txns in symbol_txns.items():
-            symbol_result = TaxCalculator._process_symbol(txns, method, include_unrealized)
+            symbol_result = TaxCalculator._process_symbol(txns, method, include_unrealized, fy_bounds)
             results[symbol] = symbol_result
             
             # Aggregate summary
@@ -79,8 +107,10 @@ class TaxCalculator:
                 'total_gain': symbol_result['stcg_gain'] + symbol_result['ltcg_gain']
             })
         
-        # Calculate total taxes after applying exemptions
-        summary['total_stcg_tax'] = summary['total_stcg'] * TaxCalculator.STCG_TAX_RATE
+        # Calculate total taxes after applying exemptions. A net short-term loss
+        # is not a negative tax (it is carried forward), so floor STCG tax at zero.
+        stcg_taxable = max(summary['total_stcg'], Decimal("0"))
+        summary['total_stcg_tax'] = stcg_taxable * TaxCalculator.STCG_TAX_RATE
         ltcg_taxable = max(summary['total_ltcg'] - TaxCalculator.LTCG_EXEMPTION, Decimal("0"))
         summary['total_ltcg_tax'] = ltcg_taxable * TaxCalculator.LTCG_TAX_RATE
         summary['total_tax'] = summary['total_stcg_tax'] + summary['total_ltcg_tax']
@@ -100,15 +130,18 @@ class TaxCalculator:
         }
     
     @staticmethod
-    def _process_symbol(txns: List, method: str, include_unrealized: bool) -> Dict:
+    def _process_symbol(txns: List, method: str, include_unrealized: bool, fy_bounds=None) -> Dict:
         """
         Process all transactions for a single symbol.
-        
+
         Args:
             txns: List of transactions for one symbol
             method: FIFO or LIFO
             include_unrealized: Whether to calculate unrealized gains
-        
+            fy_bounds: Optional (start, end) naive datetimes; when set, only sells
+                settled in that window contribute to the reported gains, while
+                FIFO still consumes lots across the whole history.
+
         Returns:
             Dict with realized and optionally unrealized gains breakdown
         """
@@ -139,49 +172,59 @@ class TaxCalculator:
                 sell_qty = Decimal(str(txn.quantity))
                 sell_price = Decimal(str(txn.price))
                 sell_date = txn.transaction_date
-                
+                sell_date_naive = _naive(sell_date)
+
+                # Only sells settled within the requested FY are reported, but the
+                # lots they consume are still removed so later-FY reports see the
+                # correct remaining cost basis.
+                in_scope = (
+                    fy_bounds is None
+                    or (sell_date_naive is not None and fy_bounds[0] <= sell_date_naive <= fy_bounds[1])
+                )
+
                 # Apply FIFO or LIFO
                 if method == 'LIFO':
                     queue_to_process = list(reversed(buy_queue))
                 else:  # FIFO
                     queue_to_process = buy_queue
-                
+
                 remaining_sell_qty = sell_qty
                 lots_to_remove = []
-                
+
                 for i, lot in enumerate(queue_to_process):
                     if remaining_sell_qty <= 0:
                         break
-                    
+
                     matched_qty = min(lot['qty'], remaining_sell_qty)
-                    
-                    # Calculate holding period
-                    holding_days = (sell_date - lot['date']).days
+
+                    # Calculate holding period (tz-normalized so mixed rows don't crash)
+                    holding_days = (sell_date_naive - _naive(lot['date'])).days
                     gain = matched_qty * (sell_price - lot['price'])
-                    
-                    transaction_detail = {
-                        'buy_date': lot['date'].strftime('%Y-%m-%d'),
-                        'sell_date': sell_date.strftime('%Y-%m-%d'),
-                        'quantity': float(matched_qty),
-                        'buy_price': float(lot['price']),
-                        'sell_price': float(sell_price),
-                        'gain': float(gain),
-                        'holding_days': holding_days,
-                        'buy_transaction_id': lot['transaction_id'],
-                        'sell_transaction_id': txn.id
-                    }
-                    
-                    if holding_days < TaxCalculator.STCG_HOLDING_DAYS:
-                        stcg_total += gain
-                        stcg_transactions.append(transaction_detail)
-                    else:
-                        ltcg_total += gain
-                        ltcg_transactions.append(transaction_detail)
-                    
+
+                    if in_scope:
+                        transaction_detail = {
+                            'buy_date': lot['date'].strftime('%Y-%m-%d'),
+                            'sell_date': sell_date.strftime('%Y-%m-%d'),
+                            'quantity': float(matched_qty),
+                            'buy_price': float(lot['price']),
+                            'sell_price': float(sell_price),
+                            'gain': float(gain),
+                            'holding_days': holding_days,
+                            'buy_transaction_id': lot['transaction_id'],
+                            'sell_transaction_id': txn.id
+                        }
+
+                        if holding_days < TaxCalculator.STCG_HOLDING_DAYS:
+                            stcg_total += gain
+                            stcg_transactions.append(transaction_detail)
+                        else:
+                            ltcg_total += gain
+                            ltcg_transactions.append(transaction_detail)
+
                     # Update lot quantity
                     lot['qty'] -= matched_qty
                     remaining_sell_qty -= matched_qty
-                    
+
                     if lot['qty'] == 0:
                         lots_to_remove.append(lot)
                 
@@ -219,7 +262,7 @@ class TaxCalculator:
                     lot_gain = lot['qty'] * (current_price - lot['price'])
                     unrealized_gain += lot_gain
                     
-                    holding_days = (datetime.now(timezone.utc) - lot['date']).days
+                    holding_days = (datetime.now() - _naive(lot['date'])).days
                     
                     current_holdings.append({
                         'buy_date': lot['date'].strftime('%Y-%m-%d'),

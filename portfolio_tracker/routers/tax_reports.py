@@ -77,19 +77,17 @@ def get_capital_gains_report(
     # Get available financial years
     available_fys = TaxCalculator.get_available_financial_years(transactions)
     
-    # Filter by financial year if specified
-    if financial_year:
-        transactions = TaxCalculator.filter_by_financial_year(transactions, financial_year)
-    
     # Validate method
     if method not in ["FIFO", "LIFO"]:
         raise HTTPException(status_code=400, detail="Method must be FIFO or LIFO")
-    
-    # Calculate capital gains
+
+    # Calculate capital gains over the full history; the FY only scopes which
+    # sells are reported (pre-filtering would corrupt FIFO lot matching).
     report = TaxCalculator.calculate_capital_gains(
         transactions,
         method=method,
-        include_unrealized=include_unrealized
+        include_unrealized=include_unrealized,
+        financial_year=financial_year,
     )
     
     # Add metadata
@@ -182,8 +180,9 @@ def get_tax_summary(
     # Calculate for each year
     years_summary = []
     for fy in available_fys:
-        filtered_txns = TaxCalculator.filter_by_financial_year(transactions, fy)
-        report = TaxCalculator.calculate_capital_gains(filtered_txns, method="FIFO")
+        report = TaxCalculator.calculate_capital_gains(
+            transactions, method="FIFO", financial_year=fy
+        )
         
         years_summary.append({
             "financial_year": fy,
@@ -228,13 +227,12 @@ def export_capital_gains_csv(
         .all()
     )
 
-    if financial_year:
-        transactions = TaxCalculator.filter_by_financial_year(transactions, financial_year)
-
     if method not in ["FIFO", "LIFO"]:
         raise HTTPException(status_code=400, detail="Method must be FIFO or LIFO")
 
-    report = TaxCalculator.calculate_capital_gains(transactions, method=method)
+    report = TaxCalculator.calculate_capital_gains(
+        transactions, method=method, financial_year=financial_year
+    )
 
     output = StringIO()
     writer = csv.writer(output)
@@ -320,13 +318,12 @@ def export_capital_gains_pdf(
         .all()
     )
 
-    if financial_year:
-        transactions = TaxCalculator.filter_by_financial_year(transactions, financial_year)
-
     if method not in ["FIFO", "LIFO"]:
         raise HTTPException(status_code=400, detail="Method must be FIFO or LIFO")
 
-    report = TaxCalculator.calculate_capital_gains(transactions, method=method)
+    report = TaxCalculator.calculate_capital_gains(
+        transactions, method=method, financial_year=financial_year
+    )
     summary = report.get("summary", {})
     fy_label = financial_year or "all"
 
@@ -458,10 +455,9 @@ def get_share_data(
         .all()
     )
 
-    if financial_year:
-        transactions = TaxCalculator.filter_by_financial_year(transactions, financial_year)
-
-    report = TaxCalculator.calculate_capital_gains(transactions, method=method)
+    report = TaxCalculator.calculate_capital_gains(
+        transactions, method=method, financial_year=financial_year
+    )
     s = report.get("summary", {})
     fy_label = financial_year or "All Time"
 

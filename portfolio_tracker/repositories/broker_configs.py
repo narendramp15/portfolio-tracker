@@ -85,10 +85,11 @@ def update_broker_config(
         config.broker_user_id = broker_user_id
     if extra_config:
         config.extra_config = extra_config
-    if last_synced:
+    # Only stamp last_synced when the caller actually performed a sync. Credential
+    # saves / OAuth token stores pass last_synced=None and must NOT be marked
+    # synced, otherwise the UI shows a fresh sync time for a never-synced broker.
+    if last_synced is not None:
         config.last_synced = last_synced
-    else:
-        config.last_synced = datetime.now(timezone.utc)
     if consent_given is not None:
         config.consent_given = consent_given
         config.consent_timestamp = datetime.now(timezone.utc) if consent_given else None

@@ -309,6 +309,18 @@ async def import_transactions_csv(
             transaction_date=tx_date,
         )
         db.add(tx)
+
+        # Keep the asset's running quantity / average cost in sync, exactly like
+        # the manual create-transaction path, so imported holdings actually show
+        # up on the Holdings page (which reads asset.quantity).
+        if tx_type == "buy":
+            total_value = (asset.quantity * asset.purchase_price) + (quantity * price)
+            total_quantity = asset.quantity + quantity
+            asset.quantity = total_quantity
+            asset.purchase_price = (total_value / total_quantity) if total_quantity > 0 else price
+        elif tx_type == "sell":
+            asset.quantity = asset.quantity - quantity
+
         imported += 1
 
     if imported:

@@ -1,10 +1,13 @@
 """5Paisa broker integration."""
 
+import logging
 import os
 from decimal import Decimal
 from typing import List, Optional
 
 from portfolio_tracker.schemas import BrokerHolding
+
+logger = logging.getLogger(__name__)
 
 
 class FivePaisaBroker:
@@ -244,16 +247,28 @@ class FivePaisaBroker:
                 current_price = holding.get("LTP", holding.get("CurrentPrice", holding.get("LastTradedPrice", 0)))
                 isin = holding.get("ISIN", holding.get("Isin", None))
                 
-                if not symbol or quantity == 0:
+                qty_dec = Decimal(str(quantity or 0))
+                if not symbol or qty_dec <= 0:
                     continue
-                
+
+                # BrokerHolding enforces prices > 0; derive one from the other and
+                # skip rows with no usable price instead of raising Decimal('0')
+                # and aborting the whole sync.
+                avg_dec = Decimal(str(avg_price)) if avg_price else Decimal("0")
+                cur_dec = Decimal(str(current_price)) if current_price else Decimal("0")
+                avg_dec = avg_dec if avg_dec > 0 else cur_dec
+                cur_dec = cur_dec if cur_dec > 0 else avg_dec
+                if avg_dec <= 0 or cur_dec <= 0:
+                    logger.warning("Skipping 5Paisa holding %s: no usable price", symbol)
+                    continue
+
                 broker_holding = BrokerHolding(
                     symbol=str(symbol),
                     isin=isin,
-                    quantity=Decimal(str(quantity)),
-                    average_price=Decimal(str(avg_price)) if avg_price else Decimal("0"),
-                    current_price=Decimal(str(current_price)) if current_price else Decimal("0"),
-                    last_price=Decimal(str(current_price)) if current_price else Decimal("0"),
+                    quantity=qty_dec,
+                    average_price=avg_dec,
+                    current_price=cur_dec,
+                    last_price=cur_dec,
                 )
                 holdings.append(broker_holding)
             

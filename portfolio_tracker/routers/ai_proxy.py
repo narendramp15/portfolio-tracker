@@ -28,6 +28,7 @@ from portfolio_tracker.config import settings
 from portfolio_tracker.database import get_db
 from portfolio_tracker.deps import get_current_user
 from portfolio_tracker.models import OptionsAnalysisLogModel, UserModel
+from portfolio_tracker.services.anthropic_client import call_anthropic
 
 logger = logging.getLogger(__name__)
 
@@ -546,42 +547,16 @@ async def nifty_analyze(
     user_msg   = _build_user_message(body.market_data)
     max_tokens = _MAX_OUTPUT_TOKENS[analysis_type]
 
-    payload = {
-        "model": model,
-        "max_tokens": max_tokens,
-        "system": [{"type": "text", "text": system_txt, "cache_control": {"type": "ephemeral"}}],
-        "messages": [{"role": "user", "content": user_msg}],
-    }
+    text, usage_raw = await call_anthropic(
+        api_key=api_key,
+        model=model,
+        system_text=system_txt,
+        user_msg=user_msg,
+        max_tokens=max_tokens,
+        timeout=60.0,
+    )
+    text = text or "No response."
 
-    headers = {
-        "x-api-key": api_key,
-        "anthropic-version": ANTHROPIC_VERSION,
-        "content-type": "application/json",
-        "anthropic-beta": "prompt-caching-2024-07-31",
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(ANTHROPIC_API_URL, json=payload, headers=headers)
-
-        data = response.json()
-        if response.status_code != 200:
-            error_msg = data.get("error", {}).get("message", "Unknown error")
-            logger.error("AI API error %s: %s", response.status_code, error_msg)
-            raise HTTPException(status_code=502, detail="AI service error. Please try again.")
-
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="Analysis timed out. Please try again.")
-    except httpx.RequestError as exc:
-        logger.exception("Network error calling AI service: %s", exc)
-        raise HTTPException(status_code=502, detail="Network error. Please try again.")
-
-    text = "".join(
-        block.get("text", "") for block in data.get("content", [])
-        if isinstance(block, dict)
-    ) or "No response."
-
-    usage_raw  = data.get("usage", {})
     inp        = usage_raw.get("input_tokens", 0)
     out        = usage_raw.get("output_tokens", 0)
     cache_read = usage_raw.get("cache_read_input_tokens", 0)

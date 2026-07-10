@@ -252,6 +252,26 @@ class OptionsAnalysisLogModel(Base):
     )
 
 
+class ProcessedPaymentModel(Base):
+    """Records every Razorpay payment already credited, to block replay/reuse.
+
+    The UNIQUE constraint on ``payment_id`` is the backstop that makes credit
+    fulfilment idempotent: a repeated verify call for the same payment fails the
+    insert instead of granting credits again.
+    """
+
+    __tablename__ = "processed_payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    payment_id = Column(String(100), nullable=False, unique=True)  # Razorpay pay_ID
+    order_id = Column(String(100), nullable=True)
+    purpose = Column(String(40), nullable=False)  # e.g. "options_credits"
+    pack_id = Column(String(40), nullable=True)
+    amount_paise = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
 class MutualFundHoldingModel(Base):
     """Mutual fund folios imported from CAMS/KFintech CAS statements."""
 

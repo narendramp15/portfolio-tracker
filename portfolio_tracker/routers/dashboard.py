@@ -156,25 +156,20 @@ async def get_portfolio_growth(
     # Simulate Nifty 50 starting value (based on approximate real Nifty levels)
     # In production, fetch actual Nifty historical data from NSE API or data provider
     nifty_current = 22500.0  # Approximate Nifty 50 level as of Jan 2026
-    
+
+    # Current totals are loop-invariant (the series is simulated from them), so
+    # compute them ONCE instead of re-querying every portfolio for all 13 months.
+    total_value = Decimal("0")
+    total_invested = Decimal("0")
+    for portfolio in portfolios:
+        stats = crud.get_portfolio_stats(db, portfolio.id)
+        total_value += Decimal(str(stats["total_value"]))
+        total_invested += Decimal(str(stats["total_invested"]))
+
     # Generate data points for the last 12 months
     for i in range(12, -1, -1):
         date = now - relativedelta(months=i)
-        
-        # Calculate portfolio value at that point
-        # For simplicity, we'll simulate growth based on current values
-        # In a real implementation, you'd query historical transaction data
-        total_value = Decimal("0")
-        total_invested = Decimal("0")
-        
-        for portfolio in portfolios:
-            stats = crud.get_portfolio_stats(db, portfolio.id)
-            current_value = Decimal(str(stats["total_value"]))
-            invested = Decimal(str(stats["total_invested"]))
-            
-            total_value += current_value
-            total_invested += invested
-        
+
         # Simulate historical growth (decay factor based on months ago)
         # This is a placeholder - real implementation would use transaction history
         if i > 0:

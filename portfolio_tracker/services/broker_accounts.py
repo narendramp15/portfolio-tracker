@@ -84,6 +84,9 @@ def save_credentials(
 
     config = broker_configs.get_broker_config_by_broker_name(db, user.id, broker_name)
     if config:
+        # Never downgrade a previously recorded consent on a plain credential
+        # re-save: forward consent only when it is affirmatively granted, so an
+        # update that omits consent leaves the stored consent audit record intact.
         return broker_configs.update_broker_config(
             db,
             config.id,
@@ -92,7 +95,7 @@ def save_credentials(
             access_token=enc(access_token) if access_token is not None else None,
             extra_config=encrypted_extra,
             broker_user_id=broker_user_id or None,
-            consent_given=consent_given,
+            consent_given=True if consent_given else None,
         )
 
     check_broker_limit(user, db)
