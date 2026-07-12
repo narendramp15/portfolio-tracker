@@ -18,7 +18,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
-from portfolio_tracker.api.middleware import CORSPreflightMiddleware, RequestLoggingMiddleware
+from portfolio_tracker.api.middleware import (CORSPreflightMiddleware,
+                                              RequestLoggingMiddleware)
 from portfolio_tracker.api.pages import mount_static
 from portfolio_tracker.api.pages import router as pages_router
 from portfolio_tracker.api.routes import register_routes
@@ -54,9 +55,9 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.CORS_ORIGINS,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-        expose_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+        allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
+        expose_headers=["Content-Disposition", "X-Total-Count"],
         max_age=3600,
     )
 

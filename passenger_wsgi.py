@@ -27,6 +27,12 @@ try:
 except ImportError:
     pass
 
+# Passenger expects a WSGI callable named `application`.
+# FastAPI is ASGI-only — bridge it synchronously using asyncio.run().
+import asyncio
+import traceback
+from io import BytesIO
+
 # ---------------------------------------------------------------------------
 # 3.  Import the FastAPI app and wrap it for Passenger.
 #     Passenger can serve ASGI apps directly when uvicorn is not available;
@@ -36,80 +42,97 @@ except ImportError:
 # ---------------------------------------------------------------------------
 from portfolio_tracker.main import app  # FastAPI / Starlette ASGI app
 
-# Passenger expects a WSGI callable named `application`.
-# FastAPI is ASGI-only, so we wrap it with asgiref's WsgiToAsgi adapter.
-# If asgiref is not available we fall back to a simple ASGI-to-WSGI shim.
-try:
-    from asgiref.wsgi import WsgiToAsgi  # type: ignore
+# HTTP status reason phrases
+_STATUS_REASONS = {
+    200: "OK", 201: "Created", 204: "No Content", 301: "Moved Permanently",
+    302: "Found", 307: "Temporary Redirect", 400: "Bad Request",
+    401: "Unauthorized", 403: "Forbidden", 404: "Not Found",
+    405: "Method Not Allowed", 409: "Conflict", 422: "Unprocessable Entity",
+    429: "Too Many Requests", 500: "Internal Server Error",
+    502: "Bad Gateway", 503: "Service Unavailable",
+}
 
-    # asgiref's adapter goes the other way; use the ASGI app directly with
-    # a helper that bridges synchronously.
-    # Actually use the correct asgiref wrapper: AsgiHandler / run_asgi_threaded
-    raise ImportError("use built-in shim below")
-except ImportError:
-    # Minimal synchronous ASGI→WSGI bridge using asyncio
-    import asyncio
-    from io import BytesIO
 
-    def _build_scope(environ):
-        headers = [
-            (k.lower().encode(), v.encode())
-            for k, v in (
-                (
-                    key[5:].replace("_", "-"),
-                    value,
-                )
-                for key, value in environ.items()
-                if key.startswith("HTTP_")
+def _build_scope(environ):
+    headers = []
+    for key, value in environ.items():
+        if key.startswith("HTTP_"):
+            header_name = key[5:].replace("_", "-").lower().encode()
+            headers.append((header_name, value.encode()))
+    if "CONTENT_TYPE" in environ and environ["CONTENT_TYPE"]:
+        headers.append((b"content-type", environ["CONTENT_TYPE"].encode()))
+    if "CONTENT_LENGTH" in environ and environ["CONTENT_LENGTH"]:
+        headers.append((b"content-length", environ["CONTENT_LENGTH"].encode()))
+
+    return {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": environ.get("SERVER_PROTOCOL", "HTTP/1.1").split("/")[-1],
+        "method": environ["REQUEST_METHOD"].upper(),
+        "headers": headers,
+        "path": environ.get("PATH_INFO", "/"),
+        "query_string": environ.get("QUERY_STRING", "").encode(),
+        "root_path": environ.get("SCRIPT_NAME", ""),
+        "server": (
+            environ.get("SERVER_NAME", "localhost"),
+            int(environ.get("SERVER_PORT", 80)),
+        ),
+        "scheme": environ.get("wsgi.url_scheme", "https"),
+    }
+
+
+def application(environ, start_response):
+    scope = _build_scope(environ)
+
+    # Read body safely, respecting Content-Length
+    wsgi_input = environ.get("wsgi.input") or BytesIO()
+    try:
+        content_length = int(environ.get("CONTENT_LENGTH") or 0)
+        body = wsgi_input.read(content_length) if content_length > 0 else b""
+    except (ValueError, OSError):
+        body = b""
+
+    response_started = []
+    response_body = []
+
+    async def receive():
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    async def send(message):
+        if message["type"] == "http.response.start":
+            response_started.append(
+                (message["status"], message.get("headers", []))
             )
-        ]
-        # Add Content-Type and Content-Length if present
-        if "CONTENT_TYPE" in environ:
-            headers.append((b"content-type", environ["CONTENT_TYPE"].encode()))
-        if "CONTENT_LENGTH" in environ and environ["CONTENT_LENGTH"]:
-            headers.append((b"content-length", environ["CONTENT_LENGTH"].encode()))
+        elif message["type"] == "http.response.body":
+            chunk = message.get("body", b"")
+            if chunk:
+                response_body.append(chunk)
 
-        return {
-            "type": "http",
-            "asgi": {"version": "3.0"},
-            "http_version": "1.1",
-            "method": environ["REQUEST_METHOD"].upper(),
-            "headers": headers,
-            "path": environ.get("PATH_INFO", "/"),
-            "query_string": environ.get("QUERY_STRING", "").encode(),
-            "root_path": environ.get("SCRIPT_NAME", ""),
-            "server": (
-                environ.get("SERVER_NAME", "localhost"),
-                int(environ.get("SERVER_PORT", 80)),
-            ),
-        }
+    async def run():
+        await app(scope, receive, send)
 
-    def application(environ, start_response):
-        scope = _build_scope(environ)
-        body = environ.get("wsgi.input", BytesIO()).read()
-        response_started = []
-        response_body = []
+    try:
+        asyncio.run(run())
+    except Exception:
+        traceback.print_exc()
+        # Return a plain 500 so LiteSpeed doesn't swallow the error
+        start_response("500 Internal Server Error", [
+            ("Content-Type", "application/json"),
+            ("Access-Control-Allow-Origin", environ.get("HTTP_ORIGIN", "*")),
+            ("Access-Control-Allow-Credentials", "true"),
+        ])
+        return [b'{"detail":"Internal server error"}']
 
-        async def receive():
-            return {"type": "http.request", "body": body, "more_body": False}
+    if not response_started:
+        start_response("500 Internal Server Error", [
+            ("Content-Type", "application/json"),
+            ("Access-Control-Allow-Origin", environ.get("HTTP_ORIGIN", "*")),
+            ("Access-Control-Allow-Credentials", "true"),
+        ])
+        return [b'{"detail":"No response from application"}']
 
-        async def send(message):
-            if message["type"] == "http.response.start":
-                response_started.append(
-                    (message["status"], message.get("headers", []))
-                )
-            elif message["type"] == "http.response.body":
-                response_body.append(message.get("body", b""))
-
-        loop = asyncio.new_event_loop()
-        try:
-            loop.run_until_complete(app(scope, receive, send))
-        finally:
-            loop.close()
-
-        status_code, raw_headers = response_started[0]
-        headers = [
-            (k.decode(), v.decode()) for k, v in raw_headers
-        ]
-        start_response(f"{status_code} OK", headers)
-        return response_body
+    status_code, raw_headers = response_started[0]
+    reason = _STATUS_REASONS.get(status_code, "Unknown")
+    headers = [(k.decode("latin-1"), v.decode("latin-1")) for k, v in raw_headers]
+    start_response(f"{status_code} {reason}", headers)
+    return response_body

@@ -10,9 +10,21 @@ PassengerStartupFile passenger_wsgi.py
 # If cPanel auto-generated a PassengerAppRoot line, keep it here.
 # PassengerAppRoot /home/<cpanel_user>/portfolio-tracker
 
+# ── CORS ─────────────────────────────────────────────────────────────────
+# CORS (including OPTIONS preflight) is handled entirely inside the FastAPI
+# app via CORSPreflightMiddleware (portfolio_tracker/api/middleware.py).
+# Do NOT set Access-Control-* headers or intercept OPTIONS here: Header
+# directives in .htaccess require AllowOverride FileInfo, which cPanel/
+# LiteSpeed vhosts often don't grant, so they get silently dropped — and an
+# "R=200" rewrite is not a valid way to short-circuit OPTIONS. Both were
+# previously causing preflight requests to reach the browser without an
+# Access-Control-Allow-Origin header while normal requests worked fine
+# (they reached Passenger and got the header from the app).
+
+RewriteEngine On
+
 # ── Rewrite all requests to Passenger ───────────────────────────────────────
 Options -MultiViews
-RewriteEngine On
 
 # Don't rewrite requests for real static files / directories
 RewriteCond %{REQUEST_FILENAME} !-f

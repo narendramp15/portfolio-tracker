@@ -62,7 +62,31 @@ class CORSPreflightMiddleware:
             })
             return
 
-        await self.app(scope, receive, send)
+        # For non-OPTIONS requests, wrap send to inject CORS headers on every response
+        headers = dict(scope.get("headers", []))
+        origin = headers.get(b"origin", b"").decode("utf-8")
+        allowed_origin = ""
+        if origin in settings.CORS_ORIGINS:
+            allowed_origin = origin
+
+        if not allowed_origin:
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_cors(message):
+            if message["type"] == "http.response.start":
+                existing = list(message.get("headers", []))
+                # Only inject if not already present
+                existing_keys = {k.lower() for k, _ in existing}
+                if b"access-control-allow-origin" not in existing_keys:
+                    existing += [
+                        (b"access-control-allow-origin", allowed_origin.encode()),
+                        (b"access-control-allow-credentials", b"true"),
+                    ]
+                message = {**message, "headers": existing}
+            await send(message)
+
+        await self.app(scope, receive, send_with_cors)
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
