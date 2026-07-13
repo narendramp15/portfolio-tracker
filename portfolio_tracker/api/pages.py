@@ -7,7 +7,7 @@ every route degrades to a redirect to ``/docs`` when it is absent.
 import os
 from pathlib import Path
 
-from fastapi import APIRouter, FastAPI, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -18,6 +18,25 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 SPA_DIST_DIR = BASE_DIR / "frontend" / "dist"
 SPA_INDEX = SPA_DIST_DIR / "index.html"
 SPA_ASSETS_DIR = SPA_DIST_DIR / "assets"
+ACME_CHALLENGE_DIR = BASE_DIR / ".well-known" / "acme-challenge"
+
+
+@router.get("/.well-known/acme-challenge/{token}")
+async def acme_challenge(token: str):
+    """Serve Let's Encrypt HTTP-01 challenge files directly from disk.
+
+    On this deployment every request is proxied through Passenger to this
+    app (no .htaccess static-file fallback — see deploye_to_milesweb.md), so
+    without this route domain validation for api.quantleap.in silently fails
+    and the CA issues a cert missing that name while other, pre-validated
+    names on the account still succeed.
+    """
+    if "/" in token or ".." in token:
+        raise HTTPException(status_code=404)
+    path = ACME_CHALLENGE_DIR / token
+    if not path.is_file():
+        raise HTTPException(status_code=404)
+    return FileResponse(path, media_type="text/plain")
 
 
 def spa_available() -> bool:
