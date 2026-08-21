@@ -23,12 +23,14 @@ from decimal import Decimal
 from dateutil.relativedelta import relativedelta
 from sqlalchemy.orm import Session
 
+from portfolio_tracker.constants import BENCHMARK_SYMBOL
 from portfolio_tracker.models import AssetModel, PortfolioModel, TransactionModel
 
 logger = logging.getLogger(__name__)
 
-# Yahoo Finance symbol for the Nifty 50 index.
-NIFTY_SYMBOL = "^NSEI"
+# Kept as an alias so the benchmark ticker has one definition shared with the
+# price-history layer that seeds it.
+NIFTY_SYMBOL = BENCHMARK_SYMBOL
 
 # Annualising a return over a very short window produces absurd numbers
 # (a 2% gain over 5 days annualises to >300%). Below this span we decline
@@ -291,10 +293,43 @@ def _load_prices(db: Session, symbols: Sequence[str], start: datetime, end: date
         try:
             points = service.get_price_history(symbol, days=days, start_date=start, end_date=end)
         except Exception:
-            logger.warning("No price history for %s; excluding from series", symbol, exc_info=True)
+            # Say "lookup failed", not "no history": the two are very different
+            # and the wording matters. A bug in the lookup once made a fully
+            # populated table look like an empty one in every log line.
+            logger.warning(
+                "Price history lookup FAILED for %s; excluding from series", symbol, exc_info=True
+            )
             points = []
+        else:
+            if not points:
+                logger.info("No stored price history for %s; excluding from series", symbol)
         lookups[symbol] = _PriceLookup(points or [])
 
+    return lookups
+
+
+def _load_prices_for(
+    db: Session,
+    keys: Sequence[str],
+    variants: dict[str, list[str]],
+    start: datetime,
+    end: datetime,
+) -> dict[str, _PriceLookup]:
+    """Price series per canonical key, trying each raw ticker it was seen as.
+
+    A security folded from "RELIANCE" and "RELIANCE.NS" may only have stored
+    history under one of them, so each variant is tried until one yields data.
+    """
+    lookups: dict[str, _PriceLookup] = {}
+    for key in keys:
+        candidates = variants.get(key) or [key]
+        for raw in candidates:
+            lookup = _load_prices(db, [raw], start, end).get(raw)
+            if lookup:
+                lookups[key] = lookup
+                break
+        else:
+            lookups[key] = _PriceLookup([])
     return lookups
 
 
@@ -311,19 +346,44 @@ def _month_end_points(months: int) -> list[datetime]:
     return points
 
 
-def _collect_ledger(db: Session, user_id: int) -> tuple[list[dict], dict[str, dict]]:
-    """Read every transaction and asset for a user, keyed by normalised symbol.
+def _canonical(symbol: str) -> str:
+    """Collapse a ticker's exchange suffix so variants name one security.
 
-    Returns ``(transactions, opening_balances)``. An opening balance covers
-    quantity a user holds that the ledger cannot explain - typically holdings
-    imported by a broker sync without their trade history - so the series does
-    not silently under-report the portfolio.
+    The same holding can sit under two asset rows - a bare "RELIANCE" left by
+    an earlier import and a normalised "RELIANCE.NS" from a broker sync - with
+    the trade history on one and the live quantity on the other. Valuing them
+    separately counts the position twice, so both fold onto one key.
+
+    Index tickers ("^NSEI") are returned untouched: they carry no exchange
+    suffix and must not be split on a dot they do not have.
+    """
+    if not symbol:
+        return ""
+    upper = symbol.upper().strip()
+    if upper.startswith("^"):
+        return upper
+    return upper.split(".")[0]
+
+
+def _collect_ledger(db: Session, user_id: int) -> tuple[list[dict], dict[str, dict], dict[str, list[str]]]:
+    """Read every transaction and asset for a user, keyed by canonical symbol.
+
+    Returns ``(transactions, opening_balances, variants)``.
+
+    Symbols are folded onto a canonical key so a security held under two asset
+    rows ("RELIANCE" and "RELIANCE.NS") is one position rather than two.
+    ``variants`` maps each canonical key back to the raw tickers seen, so the
+    price lookup can try whichever form actually has history.
+
+    An opening balance covers quantity a user holds that the ledger cannot
+    explain - typically holdings imported by a broker sync without their trade
+    history - so the series does not silently under-report the portfolio.
     """
     portfolio_ids = [
         row[0] for row in db.query(PortfolioModel.id).filter(PortfolioModel.user_id == user_id).all()
     ]
     if not portfolio_ids:
-        return [], {}
+        return [], {}, {}
 
     rows = (
         db.query(TransactionModel, AssetModel)
@@ -333,9 +393,21 @@ def _collect_ledger(db: Session, user_id: int) -> tuple[list[dict], dict[str, di
         .all()
     )
 
+    variants: dict[str, list[str]] = {}
+
+    def note_variant(raw: str) -> str:
+        """Record a raw ticker under its canonical key and return that key."""
+        key = _canonical(raw)
+        seen = variants.setdefault(key, [])
+        if raw and raw not in seen:
+            # Suffixed forms first: they are the ones Yahoo can price.
+            seen.append(raw)
+            seen.sort(key=lambda s: (("." not in s and not s.startswith("^")), s))
+        return key
+
     transactions = [
         {
-            "symbol": asset.symbol,
+            "symbol": note_variant(asset.symbol),
             "date": _naive(txn.transaction_date),
             "type": (txn.type or "").lower(),
             "quantity": Decimal(str(txn.quantity)),
@@ -351,21 +423,40 @@ def _collect_ledger(db: Session, user_id: int) -> tuple[list[dict], dict[str, di
 
     assets = db.query(AssetModel).filter(AssetModel.portfolio_id.in_(portfolio_ids)).all()
 
-    opening: dict[str, dict] = {}
+    # Sum the live quantity per security first. Splitting it across variants
+    # and reconciling each one separately would book an opening balance for
+    # the row holding the position while the row holding the ledger keeps its
+    # own quantity - the same shares counted twice.
+    held_by_symbol: dict[str, Decimal] = {}
+    basis: dict[str, dict] = {}
     for asset in assets:
-        held = Decimal(str(asset.quantity or 0))
-        explained = ledger_quantity.get(asset.symbol, Decimal("0"))
-        unexplained = held - explained
+        key = note_variant(asset.symbol)
+        quantity = Decimal(str(asset.quantity or 0))
+        held_by_symbol[key] = held_by_symbol.get(key, Decimal("0")) + quantity
+
+        since = _naive(asset.purchase_date) if asset.purchase_date else datetime.min
+        price = Decimal(str(asset.purchase_price or 0))
+        current = basis.get(key)
+        # Keep the earliest acquisition date, and a price from a row that has
+        # one, so an opening balance is dated and valued sensibly.
+        if current is None:
+            basis[key] = {"since": since, "price": price}
+        else:
+            current["since"] = min(current["since"], since)
+            if not current["price"]:
+                current["price"] = price
+
+    opening: dict[str, dict] = {}
+    for key, held in held_by_symbol.items():
+        unexplained = held - ledger_quantity.get(key, Decimal("0"))
         if unexplained > 0:
-            existing = opening.get(asset.symbol)
-            since = _naive(asset.purchase_date) if asset.purchase_date else datetime.min
-            opening[asset.symbol] = {
-                "quantity": (existing["quantity"] if existing else Decimal("0")) + unexplained,
-                "price": Decimal(str(asset.purchase_price or 0)),
-                "since": min(existing["since"], since) if existing else since,
+            opening[key] = {
+                "quantity": unexplained,
+                "price": basis[key]["price"],
+                "since": basis[key]["since"],
             }
 
-    return transactions, opening
+    return transactions, opening, variants
 
 
 def _quantities_as_of(
@@ -389,33 +480,126 @@ def _quantities_as_of(
     return {symbol: qty for symbol, qty in quantities.items() if qty > 0}
 
 
-def _net_flow_between(transactions: Sequence[dict], start: datetime, end: datetime) -> float:
-    """Money added (positive) or withdrawn (negative) in a half-open window."""
+def _net_flow_between(
+    transactions: Sequence[dict],
+    start: datetime,
+    end: datetime,
+    opening: dict[str, dict] | None = None,
+    prices: dict[str, _PriceLookup] | None = None,
+) -> float:
+    """Money added (positive) or withdrawn (negative) in a half-open window.
+
+    Opening balances count too. They are positions the ledger cannot explain -
+    typically a broker sync that imported holdings without their trade history
+    - and they enter the series on their acquisition date. Treating that entry
+    as anything other than a contribution makes a portfolio appearing all at
+    once look like a spectacular gain: one real account here jumped from
+    122k to 1.26m in a month and reported a four-figure percentage return.
+    """
     total = Decimal("0")
     for txn in transactions:
         if start < txn["date"] <= end:
             amount = txn["quantity"] * txn["price"]
             total += amount if txn["type"] == "buy" else -amount
+
+    for key, balance in (opening or {}).items():
+        if start < balance["since"] <= end:
+            total += _opening_entry_value(key, balance, prices, end)
+
     return float(total)
+
+
+def _opening_entry_value(
+    key: str,
+    balance: dict,
+    prices: dict[str, _PriceLookup] | None,
+    when: datetime,
+) -> Decimal:
+    """What an opening balance is worth as it enters the tracked portfolio.
+
+    Market value on the entry date, not original cost. These positions were
+    often bought years before this window and only became visible when a
+    broker sync imported them, so their purchase price bears no relation to
+    what arrived. Booking the cost basis leaves the gap between cost and
+    market looking like a return earned inside the window - one real account
+    reported +326% for the month its holdings were imported.
+    """
+    lookup = (prices or {}).get(key)
+    close = lookup.as_of(when) if lookup else None
+    if close is not None:
+        return balance["quantity"] * Decimal(str(close))
+    return balance["quantity"] * balance["price"]
+
+
+def _period_returns(
+    series: Sequence[dict],
+    anchors: Sequence[datetime],
+    transactions: Sequence[dict],
+    opening: dict[str, dict] | None = None,
+    prices: dict[str, _PriceLookup] | None = None,
+) -> list[float]:
+    """Flow-adjusted return for each sub-period of a valuation series.
+
+    This is the basis for TWR, volatility and drawdown alike. Computing any of
+    them from raw values instead would read every deposit as a gain.
+    """
+    returns = []
+    for index in range(1, len(series)):
+        start_value = series[index - 1]["value"]
+        if start_value <= 0:
+            continue
+        end_value = series[index]["value"]
+        net_flow = _net_flow_between(
+            transactions, anchors[index - 1], anchors[index], opening, prices
+        )
+        returns.append((end_value - net_flow) / start_value - 1.0)
+    return returns
+
+
+def _index_from_returns(returns: Sequence[float], base: float = 100.0) -> list[float]:
+    """Compound period returns into a growth index starting at ``base``.
+
+    Drawdown has to be measured on this, not on account value: a portfolio
+    that only ever grew because money was paid into it has no drawdown, but
+    its value series dips look like one.
+    """
+    index = [base]
+    for period_return in returns:
+        index.append(index[-1] * max(1.0 + period_return, 1e-9))
+    return index
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Series construction
 # ─────────────────────────────────────────────────────────────────────────────
 
-def build_valuation_series(db: Session, user_id: int, months: int = 12) -> list[dict]:
-    """Month-end portfolio value over the trailing window, against Nifty 50.
+class _SeriesContext:
+    """Everything one dashboard request needs, gathered once.
 
-    Every point is the ledger's holdings on that date valued at that date's
-    actual closing prices. Where prices cannot be obtained for enough of the
-    portfolio the whole series is dropped rather than partially reported.
-
-    Returns a list of points, or ``[]`` when the portfolio has no history or
-    prices are unavailable.
+    The ledger read, the price fetch and the anchor dates were previously
+    repeated by each public entry point - three ledger reads per request. They
+    are also mutually dependent: flows have to be valued with the same prices
+    the series is built from, or a position entering the window gets counted
+    at a stale cost basis and the difference reads as return.
     """
-    transactions, opening = _collect_ledger(db, user_id)
+
+    __slots__ = ("series", "prices", "transactions", "opening", "anchors")
+
+    def __init__(self, series, prices, transactions, opening, anchors):
+        self.series = series
+        self.prices = prices
+        self.transactions = transactions
+        self.opening = opening
+        self.anchors = anchors
+
+
+def _build_series_context(db: Session, user_id: int, months: int = 12) -> _SeriesContext:
+    """Build the valuation series and keep the inputs it was derived from."""
+    empty = _SeriesContext([], {}, [], {}, [])
+
+    transactions, opening, variants = _collect_ledger(db, user_id)
     if not transactions and not opening:
-        return []
+        return empty
 
     anchors = _month_end_points(months)
     window_start = anchors[0] - timedelta(days=7)  # padding for the first close
@@ -423,9 +607,9 @@ def build_valuation_series(db: Session, user_id: int, months: int = 12) -> list[
 
     symbols = sorted({txn["symbol"] for txn in transactions} | set(opening))
     if not symbols:
-        return []
+        return empty
 
-    prices = _load_prices(db, symbols, window_start, window_end)
+    prices = _load_prices_for(db, symbols, variants, window_start, window_end)
     nifty = _load_prices(db, [NIFTY_SYMBOL], window_start, window_end).get(NIFTY_SYMBOL)
 
     # Coverage is judged against today's holdings: a symbol we cannot price
@@ -449,7 +633,7 @@ def build_valuation_series(db: Session, user_id: int, months: int = 12) -> list[
             user_id,
             coverage * 100,
         )
-        return []
+        return empty
 
     series: list[dict] = []
     for anchor in anchors:
@@ -473,23 +657,45 @@ def build_valuation_series(db: Session, user_id: int, months: int = 12) -> list[
         )
 
     # Drop leading points from before the portfolio existed so the chart does
-    # not open on a flat zero run.
+    # not open on a flat zero run. Anchors are trimmed in step so the two stay
+    # aligned for flow attribution.
     while len(series) > 2 and series[0]["value"] == 0 and series[1]["value"] == 0:
         series.pop(0)
+    aligned_anchors = anchors[-len(series):] if series else []
 
     _rebase_benchmark(series)
-    return series
+    return _SeriesContext(series, prices, transactions, opening, aligned_anchors)
+
+
+def build_valuation_series(db: Session, user_id: int, months: int = 12) -> list[dict]:
+    """Month-end portfolio value over the trailing window, against Nifty 50.
+
+    Every point is the ledger's holdings on that date valued at that date's
+    actual closing prices. Where prices cannot be obtained for enough of the
+    portfolio the whole series is dropped rather than partially reported.
+
+    Returns a list of points, or ``[]`` when the portfolio has no history or
+    prices are unavailable.
+    """
+    return _build_series_context(db, user_id, months=months).series
 
 
 def _stored_price(db: Session, user_id: int, symbol: str) -> float:
-    """Last known price from the assets table, used only to size price gaps."""
-    asset = (
+    """Last known price from the assets table, used only to size price gaps.
+
+    ``symbol`` is a canonical key, so every asset row for the user is matched
+    on its own canonical form rather than compared literally.
+    """
+    assets = (
         db.query(AssetModel)
         .join(PortfolioModel, AssetModel.portfolio_id == PortfolioModel.id)
-        .filter(PortfolioModel.user_id == user_id, AssetModel.symbol == symbol)
-        .first()
+        .filter(PortfolioModel.user_id == user_id)
+        .all()
     )
-    return float(asset.current_price) if asset and asset.current_price else 0.0
+    for asset in assets:
+        if _canonical(asset.symbol) == symbol and asset.current_price:
+            return float(asset.current_price)
+    return 0.0
 
 
 def _rebase_benchmark(series: list[dict]) -> None:
@@ -518,7 +724,7 @@ def build_cash_flows(db: Session, user_id: int) -> tuple[list[tuple[datetime, De
     Returns ``(flows, current_value)``. Buys are negative, sells positive, and
     the closing market value is appended as a final positive flow.
     """
-    transactions, opening = _collect_ledger(db, user_id)
+    transactions, opening, _variants = _collect_ledger(db, user_id)
 
     flows: list[tuple[datetime, Decimal]] = []
     for balance in opening.values():
@@ -552,8 +758,8 @@ def compute_returns(db: Session, user_id: int, months: int = 12) -> dict:
     flows, current_value = build_cash_flows(db, user_id)
     money_weighted = xirr(flows) if flows else None
 
-    series = build_valuation_series(db, user_id, months=months)
-    values = [point["value"] for point in series]
+    context = _build_series_context(db, user_id, months=months)
+    series = context.series
 
     time_weighted = None
     time_weighted_annualised = None
@@ -562,23 +768,28 @@ def compute_returns(db: Session, user_id: int, months: int = 12) -> dict:
     benchmark_return = None
 
     if len(series) >= 2:
-        transactions, _ = _collect_ledger(db, user_id)
-        anchors = _month_end_points(months)[-len(series):]
+        anchors = context.anchors
 
-        periods = []
-        for index in range(1, len(series)):
-            start_value = series[index - 1]["value"]
-            end_value = series[index]["value"]
-            net_flow = _net_flow_between(transactions, anchors[index - 1], anchors[index])
-            periods.append((start_value, end_value, net_flow))
+        # One flow-adjusted return series feeds TWR, volatility and drawdown.
+        # Reading any of them off raw account value would count every deposit
+        # as performance.
+        returns = _period_returns(
+            series, anchors, context.transactions, context.opening, context.prices
+        )
 
-        time_weighted = twr(periods)
-        span_days = (anchors[-1] - anchors[0]).days
-        if time_weighted is not None:
+        if returns:
+            compounded = 1.0
+            for period_return in returns:
+                compounded *= max(1.0 + period_return, 1e-9)
+            time_weighted = compounded - 1.0
+
+            span_days = (anchors[-1] - anchors[0]).days
             time_weighted_annualised = annualise(time_weighted, span_days)
 
-        drawdown = max_drawdown(values)
-        volatility = annualised_volatility(values)
+            # Drawdown and volatility on the growth index, not on the balance.
+            growth_index = _index_from_returns(returns)
+            drawdown = max_drawdown(growth_index)
+            volatility = annualised_volatility(growth_index)
 
         first_bench = next((p["nifty_value"] for p in series if p["nifty_value"]), None)
         last_bench = series[-1]["nifty_value"]

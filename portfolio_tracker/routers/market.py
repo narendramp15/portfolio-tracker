@@ -269,15 +269,17 @@ async def backfill_price_history(
     Backfill price history for symbols.
     
     - If symbol provided: Backfill just that symbol
-    - If no symbol: Backfill all symbols in user's portfolios
-    
-    Only stores data within retention period (default 90 days) to save space.
+    - If no symbol: Backfill every symbol in the user's portfolios, plus the
+      benchmark index the dashboard compares against
+
+    Stores data within the retention window (PRICE_HISTORY_DAYS, default 400)
+    so the trailing-year charts are served from the database.
     """
     from portfolio_tracker.services.price_history import \
         get_price_history_service
-    
+
     service = get_price_history_service(db)
-    
+
     if symbol:
         count = service.backfill_symbol(symbol)
         return {
@@ -292,6 +294,11 @@ async def backfill_price_history(
             "symbols_processed": results["success"] + results["failed"],
             "symbols_success": results["success"],
             "symbols_failed": results["failed"],
+            # Named, not just counted: an unlisted failure is a holding that
+            # quietly goes missing from every chart reading this table.
+            "failed_symbols": results["failed_symbols"],
+            "benchmark_symbol": results["benchmark_symbol"],
+            "benchmark_ok": results["benchmark_ok"],
             "details": results["symbols"]
         }
 

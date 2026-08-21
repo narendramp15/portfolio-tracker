@@ -349,3 +349,142 @@ def test_net_flow_window_is_half_open_at_the_start():
 
     assert _net_flow_between(txns, datetime(2024, 1, 1), datetime(2024, 2, 1)) == pytest.approx(0.0)
     assert _net_flow_between(txns, datetime(2023, 12, 1), datetime(2024, 2, 1)) == pytest.approx(1000.0)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Canonical symbols
+# ─────────────────────────────────────────────────────────────────────────────
+
+from portfolio_tracker.services.portfolio_analytics import _canonical  # noqa: E402
+
+
+def test_canonical_strips_the_exchange_suffix():
+    assert _canonical("RELIANCE.NS") == "RELIANCE"
+    assert _canonical("RELIANCE.BO") == "RELIANCE"
+    assert _canonical("RELIANCE") == "RELIANCE"
+    assert _canonical("reliance.ns") == "RELIANCE"
+
+
+def test_canonical_leaves_index_tickers_alone():
+    """^NSEI has no exchange suffix and must not be split."""
+    assert _canonical("^NSEI") == "^NSEI"
+
+
+def test_canonical_handles_empty_input():
+    assert _canonical("") == ""
+    assert _canonical(None) == ""
+
+
+def test_variants_of_one_security_are_not_counted_twice():
+    """A holding split across RELIANCE and RELIANCE.NS is one position.
+
+    Counting the ledger under one row and the live quantity under the other
+    would value the same shares twice.
+    """
+    txns = [
+        _txn("RELIANCE", "buy", "10", "100", datetime(2024, 1, 1)),
+    ]
+    # The .NS row carries the live quantity; folding makes them one key, so
+    # the ledger already explains the position and no opening balance is due.
+    opening = {}
+
+    quantities = _quantities_as_of(txns, opening, datetime(2024, 6, 1))
+
+    assert quantities == {"RELIANCE": Decimal("10")}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Flow attribution
+# ─────────────────────────────────────────────────────────────────────────────
+
+from portfolio_tracker.services.portfolio_analytics import (  # noqa: E402
+    _index_from_returns,
+    _opening_entry_value,
+    _period_returns,
+    _PriceLookup,
+)
+
+
+def _balance(qty: str, price: str, since: datetime) -> dict:
+    return {"quantity": Decimal(qty), "price": Decimal(price), "since": since}
+
+
+def test_an_opening_balance_counts_as_a_contribution():
+    """A synced holding appearing is capital arriving, not a gain earned."""
+    opening = {"A": _balance("10", "100", datetime(2024, 3, 15))}
+
+    flow = _net_flow_between([], datetime(2024, 3, 1), datetime(2024, 3, 31), opening)
+
+    assert flow == pytest.approx(1000.0)
+
+
+def test_an_opening_balance_outside_the_window_is_not_counted_again():
+    opening = {"A": _balance("10", "100", datetime(2024, 1, 15))}
+
+    flow = _net_flow_between([], datetime(2024, 3, 1), datetime(2024, 3, 31), opening)
+
+    assert flow == pytest.approx(0.0)
+
+
+def test_an_opening_balance_is_valued_at_market_not_at_cost():
+    """Bought years ago at 100, worth 900 when the sync imported it: 900 is
+    what arrived. Booking 100 leaves 800 looking like return."""
+    opening = {"A": _balance("10", "100", datetime(2024, 3, 15))}
+    prices = {"A": _PriceLookup([{"date": datetime(2024, 3, 20), "close": 900.0}])}
+
+    flow = _net_flow_between(
+        [], datetime(2024, 3, 1), datetime(2024, 3, 31), opening, prices
+    )
+
+    assert flow == pytest.approx(9000.0)
+
+
+def test_opening_entry_falls_back_to_cost_without_a_price():
+    balance = _balance("10", "100", datetime(2024, 3, 15))
+
+    value = _opening_entry_value("A", balance, {}, datetime(2024, 3, 31))
+
+    assert value == Decimal("1000")
+
+
+def test_a_portfolio_that_only_received_holdings_shows_no_return():
+    """The bug this guards: a book imported all at once read as a huge gain."""
+    series = [
+        {"value": 100_000.0, "label": "Dec"},
+        {"value": 1_100_000.0, "label": "Jan"},
+    ]
+    anchors = [datetime(2026, 1, 1), datetime(2026, 2, 1)]
+    opening = {"A": _balance("1000", "1000", datetime(2026, 1, 15))}
+    prices = {"A": _PriceLookup([{"date": datetime(2026, 1, 20), "close": 1000.0}])}
+
+    returns = _period_returns(series, anchors, [], opening, prices)
+
+    # A million arrived and nothing moved, so the period earned nothing.
+    assert returns[0] == pytest.approx(0.0, abs=1e-6)
+
+
+def test_growth_index_compounds_returns_from_a_common_base():
+    index = _index_from_returns([0.10, -0.05])
+
+    assert index[0] == pytest.approx(100.0)
+    assert index[1] == pytest.approx(110.0)
+    assert index[2] == pytest.approx(104.5)
+
+
+def test_drawdown_on_the_growth_index_ignores_contributions():
+    """Account value dipping because money left is not a drawdown."""
+    # Returns are flat, so however the balance moved there is no drawdown.
+    index = _index_from_returns([0.0, 0.0, 0.0])
+
+    assert max_drawdown(index)["drawdown"] == pytest.approx(0.0)
+
+
+def test_period_returns_skip_periods_with_no_opening_capital():
+    series = [{"value": 0.0}, {"value": 5000.0}, {"value": 5500.0}]
+    anchors = [datetime(2026, 1, 1), datetime(2026, 2, 1), datetime(2026, 3, 1)]
+
+    returns = _period_returns(series, anchors, [], {})
+
+    # The first period had nothing invested to earn a return on.
+    assert len(returns) == 1
+    assert returns[0] == pytest.approx(0.10)
