@@ -98,6 +98,12 @@ class AssetModel(Base):
     id = Column(Integer, primary_key=True, index=True)
     portfolio_id = Column(Integer, ForeignKey("portfolios.id"), nullable=False, index=True)
     symbol = Column(String(20), nullable=False, index=True)  # Increased to 20 to support .NS/.BO suffixes
+    # Real instrument identity. Symbols are a display and market-data concern:
+    # they get renamed and differ per exchange and per broker, which is why the
+    # same security can currently exist as two asset rows.
+    isin = Column(String(12), nullable=True, index=True)
+    # Which demat holds this. Needed for account-wise FIFO.
+    demat_account = Column(String(60), nullable=True)
     name = Column(String(100), nullable=False)
     quantity = Column(Numeric(20, 8), nullable=False)
     current_price = Column(Numeric(20, 8), nullable=False)
@@ -147,6 +153,62 @@ class TransactionModel(Base):
         Index('ix_transactions_portfolio_type', 'portfolio_id', 'type'),
         Index('ix_transactions_asset_type', 'asset_id', 'type'),
         Index('ix_transactions_date', 'transaction_date'),
+    )
+
+
+class PortfolioEventModel(Base):
+    """Append-only ledger of everything that happened to an instrument.
+
+    Positions, capital gains, XIRR and dividend attribution are all folded from
+    this table rather than stored, so they cannot drift apart. Rows are never
+    updated or deleted: a correction is a new, compensating event, which is
+    what keeps a tax figure that has already been filed reproducible.
+
+    Identity is the ISIN, not the symbol - tickers get renamed, differ by
+    exchange and differ again by broker.
+    """
+
+    __tablename__ = "portfolio_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    portfolio_id = Column(Integer, ForeignKey("portfolios.id"), nullable=True, index=True)
+
+    isin = Column(String(12), nullable=False, index=True)
+    symbol = Column(String(30), nullable=True)  # display only, never identity
+
+    # Which demat account. Load-bearing: FIFO is applied account-wise for
+    # dematerialised securities (CBDT Circular 768), so lots must not pool.
+    account = Column(String(60), nullable=False, server_default="")
+
+    event_type = Column(String(20), nullable=False, index=True)
+    trade_date = Column(DateTime, nullable=False, index=True)
+
+    quantity = Column(Numeric(20, 8), nullable=False, server_default="0")
+    price = Column(Numeric(20, 8), nullable=False, server_default="0")
+
+    brokerage = Column(Numeric(20, 4), nullable=True, server_default="0")
+    stt = Column(Numeric(20, 4), nullable=True, server_default="0")  # not deductible
+    other_charges = Column(Numeric(20, 4), nullable=True, server_default="0")
+
+    ratio = Column(Numeric(20, 8), nullable=True)   # corporate action ratio
+    amount = Column(Numeric(20, 4), nullable=True)  # dividend cash
+
+    # Provenance. The same trade legitimately arrives from more than one place
+    # (a depository statement knows the movement, a tradebook knows the price),
+    # so ingestion is idempotent on (source, source_ref).
+    source = Column(String(60), nullable=False, server_default="")
+    source_ref = Column(String(64), nullable=False, server_default="")
+
+    notes = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    __table_args__ = (
+        # Re-importing the same statement must be a no-op.
+        UniqueConstraint("user_id", "source", "source_ref", name="uix_event_source_ref"),
+        # The fold's access pattern: one user's events for one instrument,
+        # in one account, in date order.
+        Index("ix_events_user_isin_account_date", "user_id", "isin", "account", "trade_date"),
     )
 
 
