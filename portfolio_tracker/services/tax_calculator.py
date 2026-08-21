@@ -5,6 +5,31 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Dict, List, Optional
 
+from portfolio_tracker.services import grandfathering
+
+
+def _deductible_charges(txn) -> Decimal:
+    """Charges on a transaction that reduce the taxable gain.
+
+    Brokerage and other transfer expenses (stamp duty, exchange turnover
+    charge, SEBI fee, GST) are deductible under Section 48. STT explicitly is
+    not, so it is excluded here even though it is stored on the row.
+    """
+    total = Decimal("0")
+    for field in ("brokerage", "other_charges"):
+        value = getattr(txn, field, None)
+        if value:
+            total += Decimal(str(value))
+    return total
+
+
+def _charges_per_unit(txn) -> Decimal:
+    """Deductible charges apportioned across the units in the transaction."""
+    quantity = Decimal(str(txn.quantity or 0))
+    if quantity <= 0:
+        return Decimal("0")
+    return _deductible_charges(txn) / quantity
+
 
 class TaxCalculator:
     """
@@ -89,16 +114,25 @@ class TaxCalculator:
             'total_stcg_tax': Decimal("0"),
             'total_ltcg_tax': Decimal("0"),
             'total_tax': Decimal("0"),
+            'total_charges': Decimal("0"),
+            'grandfathered_symbols': [],
+            'symbols_missing_fmv': [],
             'symbols': []
         }
         
         for symbol, txns in symbol_txns.items():
-            symbol_result = TaxCalculator._process_symbol(txns, method, include_unrealized, fy_bounds)
+            symbol_result = TaxCalculator._process_symbol(
+                txns, method, include_unrealized, fy_bounds, symbol=symbol
+            )
             results[symbol] = symbol_result
-            
+
             # Aggregate summary
             summary['total_stcg'] += Decimal(str(symbol_result['stcg_gain']))
             summary['total_ltcg'] += Decimal(str(symbol_result['ltcg_gain']))
+            summary['total_charges'] += Decimal(str(symbol_result['charges_deducted']))
+            if symbol_result['grandfathering_applied']:
+                summary['grandfathered_symbols'].append(symbol)
+            summary['symbols_missing_fmv'].extend(symbol_result['fmv_missing'])
             summary['symbols'].append({
                 'symbol': symbol,
                 'name': txns[0].asset.name if txns[0].asset else symbol,
@@ -121,7 +155,10 @@ class TaxCalculator:
         summary['total_stcg_tax'] = float(summary['total_stcg_tax'])
         summary['total_ltcg_tax'] = float(summary['total_ltcg_tax'])
         summary['total_tax'] = float(summary['total_tax'])
+        summary['total_charges'] = float(summary['total_charges'])
         summary['ltcg_exemption_used'] = float(min(summary['total_ltcg'], TaxCalculator.LTCG_EXEMPTION))
+        # Deduplicate: a symbol can lack an FMV across several matched lots.
+        summary['symbols_missing_fmv'] = sorted(set(summary['symbols_missing_fmv']))
         
         return {
             'summary': summary,
@@ -130,7 +167,13 @@ class TaxCalculator:
         }
     
     @staticmethod
-    def _process_symbol(txns: List, method: str, include_unrealized: bool, fy_bounds=None) -> Dict:
+    def _process_symbol(
+        txns: List,
+        method: str,
+        include_unrealized: bool,
+        fy_bounds=None,
+        symbol: str = "",
+    ) -> Dict:
         """
         Process all transactions for a single symbol.
 
@@ -141,6 +184,8 @@ class TaxCalculator:
             fy_bounds: Optional (start, end) naive datetimes; when set, only sells
                 settled in that window contribute to the reported gains, while
                 FIFO still consumes lots across the whole history.
+            symbol: Ticker for this group, needed to look up the 31-Jan-2018
+                fair market value for Section 112A grandfathering.
 
         Returns:
             Dict with realized and optionally unrealized gains breakdown
@@ -158,19 +203,28 @@ class TaxCalculator:
         ltcg_total = Decimal("0")
         stcg_transactions = []
         ltcg_transactions = []
+        charges_deducted = Decimal("0")
+        # Lots that qualified for the 112A step-up but had no FMV on file. These
+        # are reported so the user can see which gains are overstated.
+        symbols_missing_fmv = set()
         
         for txn in sorted_txns:
             if txn.type.lower() == 'buy':
                 buy_queue.append({
                     'qty': Decimal(str(txn.quantity)),
                     'price': Decimal(str(txn.price)),
+                    # Purchase brokerage forms part of the cost of acquisition.
+                    'charges_per_unit': _charges_per_unit(txn),
                     'date': txn.transaction_date,
                     'transaction_id': txn.id
                 })
-            
+
             elif txn.type.lower() == 'sell':
                 sell_qty = Decimal(str(txn.quantity))
                 sell_price = Decimal(str(txn.price))
+                # Selling costs are expenses on transfer, deducted from the
+                # sale consideration before the gain is computed.
+                sell_charges_per_unit = _charges_per_unit(txn)
                 sell_date = txn.transaction_date
                 sell_date_naive = _naive(sell_date)
 
@@ -199,22 +253,56 @@ class TaxCalculator:
 
                     # Calculate holding period (tz-normalized so mixed rows don't crash)
                     holding_days = (sell_date_naive - _naive(lot['date'])).days
-                    gain = matched_qty * (sell_price - lot['price'])
+                    is_long_term = holding_days >= TaxCalculator.STCG_HOLDING_DAYS
+
+                    # Net sale consideration and cost of acquisition, both after
+                    # deductible charges (STT is excluded by _charges_per_unit).
+                    net_sell_price = sell_price - sell_charges_per_unit
+                    cost_per_unit = lot['price'] + lot.get('charges_per_unit', Decimal("0"))
+
+                    # Section 112A: step the cost up to the 31-Jan-2018 FMV for
+                    # long-term lots acquired before 1 Feb 2018.
+                    grandfathered = False
+                    fmv_missing = False
+                    if grandfathering.is_eligible(
+                        lot['date'], holding_days, TaxCalculator.STCG_HOLDING_DAYS
+                    ):
+                        if grandfathering.get_fmv(symbol) is None:
+                            fmv_missing = True
+                            symbols_missing_fmv.add(symbol)
+                        else:
+                            cost_per_unit, grandfathered = grandfathering.stepped_up_cost(
+                                symbol, cost_per_unit, net_sell_price
+                            )
+
+                    gain = matched_qty * (net_sell_price - cost_per_unit)
+                    lot_charges = matched_qty * (
+                        sell_charges_per_unit + lot.get('charges_per_unit', Decimal("0"))
+                    )
 
                     if in_scope:
+                        # Only charges against reported sells count toward the
+                        # reported total; an earlier FY's costs belong to that
+                        # year's report, not this one.
+                        charges_deducted += lot_charges
                         transaction_detail = {
                             'buy_date': lot['date'].strftime('%Y-%m-%d'),
                             'sell_date': sell_date.strftime('%Y-%m-%d'),
                             'quantity': float(matched_qty),
                             'buy_price': float(lot['price']),
                             'sell_price': float(sell_price),
+                            'cost_basis_per_unit': float(cost_per_unit),
+                            'net_sell_price': float(net_sell_price),
+                            'charges': float(lot_charges),
                             'gain': float(gain),
                             'holding_days': holding_days,
+                            'grandfathered': grandfathered,
+                            'fmv_missing': fmv_missing,
                             'buy_transaction_id': lot['transaction_id'],
                             'sell_transaction_id': txn.id
                         }
 
-                        if holding_days < TaxCalculator.STCG_HOLDING_DAYS:
+                        if not is_long_term:
                             stcg_total += gain
                             stcg_transactions.append(transaction_detail)
                         else:
@@ -244,7 +332,12 @@ class TaxCalculator:
             'ltcg_tax_without_exemption': float(ltcg_tax_without_exemption),
             'stcg_transactions': stcg_transactions,
             'ltcg_transactions': ltcg_transactions,
-            'realized_count': len(stcg_transactions) + len(ltcg_transactions)
+            'realized_count': len(stcg_transactions) + len(ltcg_transactions),
+            'charges_deducted': float(charges_deducted),
+            'grandfathering_applied': any(
+                t.get('grandfathered') for t in ltcg_transactions
+            ),
+            'fmv_missing': sorted(symbols_missing_fmv),
         }
         
         # Calculate unrealized gains if requested
@@ -259,15 +352,19 @@ class TaxCalculator:
             
             for lot in buy_queue:
                 if current_price:
-                    lot_gain = lot['qty'] * (current_price - lot['price'])
+                    # Same cost basis the realized path uses, so a lot's
+                    # unrealized gain does not jump when it is sold.
+                    cost_per_unit = lot['price'] + lot.get('charges_per_unit', Decimal("0"))
+                    lot_gain = lot['qty'] * (current_price - cost_per_unit)
                     unrealized_gain += lot_gain
-                    
+
                     holding_days = (datetime.now() - _naive(lot['date'])).days
-                    
+
                     current_holdings.append({
                         'buy_date': lot['date'].strftime('%Y-%m-%d'),
                         'quantity': float(lot['qty']),
                         'buy_price': float(lot['price']),
+                        'cost_basis_per_unit': float(cost_per_unit),
                         'current_price': float(current_price),
                         'unrealized_gain': float(lot_gain),
                         'holding_days': holding_days,

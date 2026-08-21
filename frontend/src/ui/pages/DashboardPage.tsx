@@ -7,7 +7,8 @@ import { formatCurrencyINR, formatPercent } from '../../lib/format'
 import { type DashboardStats } from '../../types/domain'
 import { Card } from '../components/Card'
 import { KpiCard } from '../components/KpiCard'
-import { PortfolioGrowthChart } from '../components/PortfolioGrowthChart'
+import { PortfolioGrowthChart, type GrowthDataPoint } from '../components/PortfolioGrowthChart'
+import { ReturnsPanel, type PortfolioReturns } from '../components/ReturnsPanel'
 
 type DashboardTheme = 'indigo-purple' | 'blue-gray' | 'cyan-emerald' | 'orange-amber' | 'deep-blue'
 
@@ -69,14 +70,6 @@ const themeConfig = {
   },
 }
 
-type GrowthDataPoint = {
-  year: number
-  month: number
-  value: number
-  nifty_value: number
-  label: string
-}
-
 async function fetchStats() {
   const { data } = await api.get<DashboardStats>('/dashboard/stats')
   return {
@@ -101,6 +94,11 @@ async function fetchGrowthData() {
   return data
 }
 
+async function fetchReturns() {
+  const { data } = await api.get<PortfolioReturns>('/dashboard/returns')
+  return data
+}
+
 export function DashboardPage() {
   const [theme, setTheme] = useState<DashboardTheme>(() => {
     const saved = localStorage.getItem('dashboardTheme')
@@ -115,6 +113,7 @@ export function DashboardPage() {
 
   const query = useQuery({ queryKey: ['dashboard', 'stats'], queryFn: fetchStats })
   const growthQuery = useQuery({ queryKey: ['dashboard', 'growth'], queryFn: fetchGrowthData })
+  const returnsQuery = useQuery({ queryKey: ['dashboard', 'returns'], queryFn: fetchReturns })
 
   if (query.isLoading) {
     return (
@@ -282,6 +281,9 @@ export function DashboardPage() {
           </Card>
         </div>
       </div>
+
+      {/* Returns: XIRR, TWR, benchmark, drawdown */}
+      <ReturnsPanel data={returnsQuery.data} isLoading={returnsQuery.isLoading} />
 
       {/* Growth Chart */}
       <PortfolioGrowthChart data={growthQuery.data || []} isLoading={growthQuery.isLoading} />

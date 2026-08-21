@@ -161,10 +161,19 @@
 
 1. **Angel Broking**: Not yet implemented (UI shows "Coming Soon")
 2. **Email Notifications**: Not yet implemented
-3. **Historical Price Data**: Limited to broker sync data, not daily EOD history
-4. **Indexation Benefit**: Not calculated (12.5% LTCG rate applies without indexation)
-5. **STT**: Not calculated (informational note only)
-6. **Non-Resident Tax**: Not calculated (assumed resident)
+3. **Historical Price Data**: Sourced on demand from yfinance; only the last
+   `PRICE_HISTORY_DAYS` (default 90) are retained in the database
+4. **Indexation Benefit**: Not applicable — the 12.5% LTCG regime removed it
+5. **Charges**: Brokerage and other transfer expenses are deducted from gains
+   when recorded on a transaction; STT is stored but correctly not deducted.
+   Broker syncs do not yet populate charges, so synced trades read as zero-cost
+6. **Section 112A grandfathering**: Implemented, but inert until
+   `portfolio_tracker/data/fmv_31jan2018.json` is populated. Until then,
+   pre-Feb-2018 lots are reported as un-grandfathered and flagged in the UI
+7. **Corporate actions**: Splits, bonuses, rights and demergers are not
+   handled — a corporate action will misstate both holdings and gains
+8. **Dividends**: Not tracked
+9. **Non-Resident Tax**: Not calculated (assumed resident)
 
 ---
 

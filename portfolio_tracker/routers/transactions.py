@@ -426,6 +426,9 @@ async def create_transaction(
         quantity=transaction.quantity,
         price=transaction.price,
         notes=transaction.notes,
+        brokerage=transaction.brokerage or Decimal("0"),
+        stt=transaction.stt or Decimal("0"),
+        other_charges=transaction.other_charges or Decimal("0"),
     )
     db.add(tx)
 

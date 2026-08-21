@@ -79,8 +79,13 @@ class GrowthDataPoint(BaseModel):
     year: int
     month: int
     value: float
-    nifty_value: float
+    # Null when no index close is available for that date - the chart draws a
+    # gap rather than interpolating a benchmark that was never observed.
+    nifty_value: Optional[float] = None
     label: str
+    # Fraction of portfolio value that could be priced from real history.
+    # Below 1.0 the line understates the portfolio and the UI says so.
+    coverage: float = 1.0
 
 
 # Asset Schemas
@@ -174,6 +179,12 @@ class TransactionBase(BaseModel):
     quantity: Decimal = Field(..., gt=0)
     price: Decimal = Field(..., gt=0)
     notes: Optional[str] = None
+
+    # Charges are optional: a user who does not enter them gets the same
+    # numbers as before, but one who does gets gains net of trading costs.
+    brokerage: Optional[Decimal] = Field(default=None, ge=0)
+    stt: Optional[Decimal] = Field(default=None, ge=0)
+    other_charges: Optional[Decimal] = Field(default=None, ge=0)
 
 
 class TransactionCreate(TransactionBase):

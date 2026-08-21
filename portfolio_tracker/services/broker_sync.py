@@ -24,6 +24,16 @@ from portfolio_tracker.services.symbol_mapper import symbol_mapper
 logger = logging.getLogger(__name__)
 
 
+def _has_local_transactions(db: Session, asset_id: int) -> bool:
+    """Whether this app holds any trade history of its own for an asset."""
+    return (
+        db.query(TransactionModel.id)
+        .filter(TransactionModel.asset_id == asset_id)
+        .first()
+        is not None
+    )
+
+
 def require_portfolio(db: Session, user_id: int, portfolio_id: int):
     """Return the portfolio if it exists and belongs to the user, else raise."""
     portfolio = portfolios_repo.get_portfolio_by_id(db, portfolio_id)
@@ -69,7 +79,14 @@ def upsert_holdings(
             asset.name = company_name  # update name in case it changed
             asset.quantity = holding.quantity
             asset.current_price = holding.current_price
-            asset.purchase_price = holding.average_price
+
+            # Only adopt the broker's average cost when this app has no
+            # transaction history of its own for the asset. Where the user has
+            # entered or imported trades, that ledger is the cost basis the tax
+            # report computes from, and overwriting it here would silently move
+            # both the reported P&L and the capital gains figure.
+            if not _has_local_transactions(db, asset.id):
+                asset.purchase_price = holding.average_price
 
         db.commit()
 

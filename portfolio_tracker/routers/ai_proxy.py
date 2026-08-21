@@ -125,8 +125,11 @@ SYSTEM_QUICK = (
 )
 
 SYSTEM_FULL = (
-    "You are an expert SEBI-registered intraday trading analyst specialising in Indian equity "
-    "derivatives — Nifty 50 and Bank Nifty.\n"
+    # Do NOT claim SEBI registration here. The product is not a registered
+    # research analyst and the UI disclaims it; a persona that says otherwise
+    # puts a false regulatory claim in front of paying users.
+    "You are an expert technical analyst covering Indian equity derivatives — "
+    "Nifty 50 and Bank Nifty.\n"
     "When given today's market data, produce a complete intraday analysis with the following "
     "7 sections — use emojis, clear section headers, and specific price levels (no vague advice):\n\n"
     "1. 🎯 MARKET BIAS\n"

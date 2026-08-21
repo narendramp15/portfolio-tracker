@@ -72,7 +72,20 @@ Desktop.ini
 *.sqlite3
 *.log
 logs/
+# Compressed server logs. Access logs record client IPs and full request
+# lines, and OAuth callbacks here carry ?code= / ?request_token= in the URL,
+# so a stray `git add -A` would publish live credentials.
+*.log.gz
+*_log-*.gz
+*ssl_log*
+access_log*
+error_log*
 data/
+# Exception: static reference data the app reads at runtime (published
+# exchange figures, not a local dump). Code depends on this path existing,
+# so it has to ship with the repo.
+!portfolio_tracker/data/
+!portfolio_tracker/data/**
 temp/
 graphify-out/
 

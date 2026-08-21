@@ -68,6 +68,9 @@ def get_capital_gains_report(
                 "total_ltcg_tax": 0,
                 "total_tax": 0,
                 "ltcg_exemption_used": 0,
+                "total_charges": 0,
+                "grandfathered_symbols": [],
+                "symbols_missing_fmv": [],
                 "symbols": []
             },
             "by_symbol": {},

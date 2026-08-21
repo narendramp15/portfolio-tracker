@@ -47,6 +47,12 @@ interface TaxReport {
         total_ltcg_tax: number
         total_tax: number
         ltcg_exemption_used: number
+        /** Brokerage and other transfer expenses already deducted from gains. */
+        total_charges: number
+        /** Symbols where the Sec 112A 31-Jan-2018 step-up was applied. */
+        grandfathered_symbols: string[]
+        /** Pre-Feb-2018 holdings with no 31-Jan-2018 FMV on file. */
+        symbols_missing_fmv: string[]
         symbols: SymbolGain[]
     }
     by_symbol: Record<string, SymbolReport>
@@ -375,11 +381,43 @@ export default function TaxReportsPage() {
                                     <li><strong>STCG</strong> (&lt; 1 year): 20% flat rate</li>
                                     <li><strong>LTCG</strong> (≥ 1 year): 12.5% with ₹1.25L annual exemption</li>
                                     <li>No indexation benefits under 12.5% LTCG regime</li>
-                                    <li>STT (Securities Transaction Tax) applies to all equity trades</li>
+                                    <li>
+                                        Brokerage and transfer expenses are deducted from gains;
+                                        STT is not deductible
+                                        {taxReport.summary.total_charges > 0 && (
+                                            <> — {formatCurrencyINR(taxReport.summary.total_charges)} deducted</>
+                                        )}
+                                    </li>
+                                    {taxReport.summary.grandfathered_symbols?.length > 0 && (
+                                        <li>
+                                            Section 112A step-up to the 31 Jan 2018 value applied to{' '}
+                                            {taxReport.summary.grandfathered_symbols.join(', ')}
+                                        </li>
+                                    )}
                                     <li>Method: {method} (can switch to see impact)</li>
                                 </ul>
                             </div>
                         </div>
+
+                        {/* Grandfathering gaps: these gains are overstated, and the
+                            user needs to know which ones before filing. */}
+                        {taxReport.summary.symbols_missing_fmv?.length > 0 && (
+                            <div className="bg-amber-500/10 border border-amber-500/50 rounded-lg p-4 flex items-start gap-3">
+                                <Info className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                                <div className="text-sm text-amber-900 dark:text-amber-100">
+                                    <p className="font-semibold mb-1">Gains may be overstated</p>
+                                    <p className="text-xs leading-relaxed">
+                                        {taxReport.summary.symbols_missing_fmv.join(', ')} —
+                                        bought before 1 February 2018, so only the gain since
+                                        31 January 2018 is taxable under Section 112A. We do not
+                                        have that day's value on file, so the figures above use
+                                        your actual purchase price and the long-term gain is
+                                        higher than it should be. Check the 31 Jan 2018 price
+                                        before filing.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
 
                         {/* By Symbol Breakdown */}
                         <div className="bg-surface border border-border rounded-lg overflow-hidden">

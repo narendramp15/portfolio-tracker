@@ -9,6 +9,7 @@ from portfolio_tracker import crud, schemas
 from portfolio_tracker.database import get_db
 from portfolio_tracker.deps import get_current_user
 from portfolio_tracker.models import UserModel
+from portfolio_tracker.services import portfolio_analytics
 
 router = APIRouter()
 
@@ -140,71 +141,36 @@ async def get_portfolio_dashboard(
 
 @router.get("/growth", response_model=list[schemas.GrowthDataPoint])
 async def get_portfolio_growth(
-    user: UserModel = Depends(get_current_user), db: Session = Depends(get_db)
+    months: int = 12,
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    """Get yearly portfolio growth data for chart visualization."""
-    from datetime import datetime, timedelta
+    """Month-end portfolio value against Nifty 50, rebuilt from the ledger.
 
-    from dateutil.relativedelta import relativedelta
-    
-    portfolios = crud.get_portfolios(db, user_id=user.id)
-    
-    # Get current date and calculate 12 months back
-    now = datetime.now()
-    growth_data = []
-    
-    # Simulate Nifty 50 starting value (based on approximate real Nifty levels)
-    # In production, fetch actual Nifty historical data from NSE API or data provider
-    nifty_current = 22500.0  # Approximate Nifty 50 level as of Jan 2026
+    Each point is the holdings the transaction ledger says were held on that
+    date, valued at that date's actual closing prices, with the index rebased
+    onto the portfolio's axis for comparison.
 
-    # Current totals are loop-invariant (the series is simulated from them), so
-    # compute them ONCE instead of re-querying every portfolio for all 13 months.
-    total_value = Decimal("0")
-    total_invested = Decimal("0")
-    for portfolio in portfolios:
-        stats = crud.get_portfolio_stats(db, portfolio.id)
-        total_value += Decimal(str(stats["total_value"]))
-        total_invested += Decimal(str(stats["total_invested"]))
+    Returns an empty list when there is no history to plot or when too little
+    of the portfolio can be priced - the chart renders its empty state rather
+    than a simulated line.
+    """
+    months = max(1, min(months, 60))
+    return portfolio_analytics.build_valuation_series(db, user_id=user.id, months=months)
 
-    # Generate data points for the last 12 months
-    for i in range(12, -1, -1):
-        date = now - relativedelta(months=i)
 
-        # Simulate historical growth (decay factor based on months ago)
-        # This is a placeholder - real implementation would use transaction history
-        if i > 0:
-            decay_factor = 1 - (i * 0.05)  # Assume ~5% monthly growth on average
-            simulated_value = float(total_value) * decay_factor
-        else:
-            simulated_value = float(total_value)
-        
-        # Ensure value doesn't go below invested amount minus some loss tolerance
-        min_value = float(total_invested) * 0.7  # Don't simulate more than 30% loss
-        simulated_value = max(simulated_value, min_value)
-        
-        # Simulate Nifty growth (assume average 12-15% annual return)
-        # Nifty typically grows 1-1.5% per month on average with volatility
-        if i > 0:
-            nifty_decay = 1 - (i * 0.012)  # ~1.2% monthly growth
-            simulated_nifty = nifty_current * nifty_decay
-        else:
-            simulated_nifty = nifty_current
-        
-        # Normalize Nifty to portfolio scale for better visualization
-        # Start both at same baseline for comparison
-        if i == 12:
-            nifty_baseline = simulated_nifty
-            portfolio_baseline = simulated_value
-        
-        # Scale Nifty proportionally to portfolio starting value
-        nifty_scaled = (simulated_nifty / nifty_baseline) * portfolio_baseline if portfolio_baseline > 0 else simulated_nifty
-        
-        growth_data.append({
-            "year": date.year,
-            "month": date.month,
-            "value": round(simulated_value, 2),
-            "nifty_value": round(nifty_scaled, 2),
-            "label": date.strftime("%b %Y")
-        })
-    
-    return growth_data
+@router.get("/returns")
+async def get_portfolio_returns(
+    months: int = 12,
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Headline performance metrics: XIRR, TWR, benchmark alpha, drawdown.
+
+    XIRR is money-weighted and answers "how did my rupees do". TWR removes the
+    effect of contribution timing and is the figure that can fairly be compared
+    against the index. Any metric that cannot be computed from available data
+    is returned as null rather than estimated.
+    """
+    months = max(1, min(months, 60))
+    return portfolio_analytics.compute_returns(db, user_id=user.id, months=months)

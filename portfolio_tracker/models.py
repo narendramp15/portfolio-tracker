@@ -125,6 +125,15 @@ class TransactionModel(Base):
     quantity = Column(Numeric(20, 8), nullable=False)
     price = Column(Numeric(20, 8), nullable=False)
     notes = Column(String(500), nullable=True)
+
+    # Transaction charges, kept separate because they are treated differently
+    # under Indian capital gains rules: brokerage and other transfer expenses
+    # are deductible against the gain, STT explicitly is not (Sec 48).
+    brokerage = Column(Numeric(20, 4), nullable=True, default=Decimal("0"), server_default="0")
+    stt = Column(Numeric(20, 4), nullable=True, default=Decimal("0"), server_default="0")
+    other_charges = Column(  # stamp duty, exchange turnover, SEBI fee, GST
+        Numeric(20, 4), nullable=True, default=Decimal("0"), server_default="0"
+    )
     transaction_date = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 

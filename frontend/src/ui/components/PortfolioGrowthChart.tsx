@@ -3,12 +3,16 @@ import { TrendingUp } from 'lucide-react'
 import { formatCurrencyINR } from '../../lib/format'
 import { Card } from './Card'
 
-type GrowthDataPoint = {
+export type GrowthDataPoint = {
     year: number
     month: number
     value: number
-    nifty_value: number
+    // Null where no index close was recorded for that month - the benchmark
+    // line breaks rather than inventing a level.
+    nifty_value: number | null
     label: string
+    // Share of portfolio value that could be priced from real history.
+    coverage?: number
 }
 
 type PortfolioGrowthChartProps = {
@@ -28,12 +32,19 @@ export function PortfolioGrowthChart({ data, isLoading }: PortfolioGrowthChartPr
     if (!data || data.length === 0) {
         return (
             <Card>
-                <div className="flex items-center justify-center h-[400px] text-sm text-muted">
-                    No growth data available
+                <div className="flex flex-col items-center justify-center gap-2 h-[400px] px-6 text-center">
+                    <p className="text-sm text-muted">No price history yet</p>
+                    <p className="text-xs text-muted/70 max-w-sm">
+                        This chart is built from your transactions valued at each
+                        month's actual closing prices. It appears once there is
+                        enough recorded history to plot.
+                    </p>
                 </div>
             </Card>
         )
     }
+
+    const coverage = data[0]?.coverage
 
     const formatValue = (value: number) => {
         if (value >= 100000) {
@@ -59,15 +70,17 @@ export function PortfolioGrowthChart({ data, isLoading }: PortfolioGrowthChartPr
                                 {formatCurrencyINR(payload[0].value)}
                             </span>
                         </div>
-                        <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full bg-amber-500"></div>
-                                <span className="text-xs text-muted">Nifty 50</span>
+                        {payload[1]?.value != null && (
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-amber-500"></div>
+                                    <span className="text-xs text-muted">Nifty 50</span>
+                                </div>
+                                <span className="text-sm font-black text-amber-600 dark:text-amber-400">
+                                    {formatCurrencyINR(payload[1].value)}
+                                </span>
                             </div>
-                            <span className="text-sm font-black text-amber-600 dark:text-amber-400">
-                                {formatCurrencyINR(payload[1]?.value || 0)}
-                            </span>
-                        </div>
+                        )}
                     </div>
                 </div>
             )
@@ -86,7 +99,9 @@ export function PortfolioGrowthChart({ data, isLoading }: PortfolioGrowthChartPr
                     </div>
                     <div>
                         <h3 className="text-lg font-black text-text">Portfolio Growth</h3>
-                        <p className="text-xs text-muted">12-month value trend vs Nifty 50</p>
+                        <p className="text-xs text-muted">
+                            Month-end value vs Nifty 50, from your transactions
+                        </p>
                     </div>
                 </div>
                 <div className="flex items-center gap-4">
@@ -157,6 +172,7 @@ export function PortfolioGrowthChart({ data, isLoading }: PortfolioGrowthChartPr
                         <Area
                             type="monotone"
                             dataKey="nifty_value"
+                            connectNulls={false}
                             stroke="#f59e0b"
                             strokeWidth={2}
                             strokeDasharray="5 5"
@@ -177,6 +193,13 @@ export function PortfolioGrowthChart({ data, isLoading }: PortfolioGrowthChartPr
                     </AreaChart>
                 </ResponsiveContainer>
             </div>
+
+            {coverage != null && coverage < 0.999 && (
+                <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">
+                    Historical prices were unavailable for part of this portfolio,
+                    so this line covers {Math.round(coverage * 100)}% of its value.
+                </p>
+            )}
         </Card>
     )
 }
