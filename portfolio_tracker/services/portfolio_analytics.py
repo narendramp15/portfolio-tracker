@@ -158,24 +158,33 @@ def twr(periods: Sequence[tuple[float, float, float]]) -> float | None:
         Cumulative return as a decimal, or ``None`` if no period had a
         valuable starting balance to compound from.
     """
-    compounded = 1.0
-    used = 0
-
+    returns = []
     for start_value, end_value, net_flow in periods:
         if start_value <= 0:
             # No capital at risk at the start of the period; the period cannot
             # contribute a return, only a starting balance for the next one.
             continue
-        period_return = (end_value - net_flow) / start_value
-        if period_return <= 0:
-            # A total wipeout would zero the chain; clamp so one bad data point
-            # cannot make every later period meaningless.
-            period_return = max(period_return, 1e-9)
-        compounded *= period_return
-        used += 1
+        returns.append((end_value - net_flow) / start_value - 1.0)
 
-    if used == 0:
+    return compound_returns(returns)
+
+
+def compound_returns(returns: Sequence[float]) -> float | None:
+    """Chain per-period returns into one cumulative return.
+
+    Shared by :func:`twr` and by the dashboard, which needs the underlying
+    per-period returns for volatility and drawdown as well and so computes
+    them itself. Keeping one implementation means the tested path is the one
+    that runs in production.
+    """
+    if not returns:
         return None
+
+    compounded = 1.0
+    for period_return in returns:
+        # A total wipeout would zero the chain; clamp so one bad data point
+        # cannot make every later period meaningless.
+        compounded *= max(1.0 + period_return, 1e-9)
     return compounded - 1.0
 
 
@@ -778,10 +787,7 @@ def compute_returns(db: Session, user_id: int, months: int = 12) -> dict:
         )
 
         if returns:
-            compounded = 1.0
-            for period_return in returns:
-                compounded *= max(1.0 + period_return, 1e-9)
-            time_weighted = compounded - 1.0
+            time_weighted = compound_returns(returns)
 
             span_days = (anchors[-1] - anchors[0]).days
             time_weighted_annualised = annualise(time_weighted, span_days)

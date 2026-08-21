@@ -162,7 +162,8 @@
 1. **Angel Broking**: Not yet implemented (UI shows "Coming Soon")
 2. **Email Notifications**: Not yet implemented
 3. **Historical Price Data**: Sourced on demand from yfinance; only the last
-   `PRICE_HISTORY_DAYS` (default 90) are retained in the database
+   `PRICE_HISTORY_DAYS` (default 400) are retained in the database, enough to
+   serve the trailing-year charts without a live fetch
 4. **Indexation Benefit**: Not applicable — the 12.5% LTCG regime removed it
 5. **Charges**: Brokerage and other transfer expenses are deducted from gains
    when recorded on a transaction; STT is stored but correctly not deducted.
