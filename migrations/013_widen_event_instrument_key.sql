@@ -1,0 +1,23 @@
+-- Migration 013: widen the event instrument key.
+--
+-- `portfolio_events.isin` was VARCHAR(12), which is exactly right for a real
+-- ISIN and wrong for the column's actual contents. The column holds an
+-- *instrument key*: a validated ISIN where one is known, and a marked
+-- placeholder (`SYM:RELIANCE`) where it is not, so history with no ISIN stays
+-- usable and is obviously incomplete in the data.
+--
+-- Those placeholders are longer than 12 characters for any symbol over eight
+-- characters, and MariaDB silently truncated them on write: `SYM:ASIANPAINT`
+-- was stored as `SYM:ASIANPAI`. The fold then keyed lots under a truncated
+-- name that nothing else could match, so seventeen instruments reported a
+-- holding of zero against a non-zero assets table. The backfill's --verify
+-- step caught it before anything read from the ledger.
+--
+-- 24 characters leaves room for the longest NSE symbol plus the prefix.
+--
+-- `assets.isin` is deliberately left at 12: that column holds real ISINs only.
+--
+-- Run with, from the repo root:
+--     uv run python run_sql_migration.py 013_widen_event_instrument_key.sql
+
+ALTER TABLE portfolio_events MODIFY COLUMN isin VARCHAR(24) NOT NULL;

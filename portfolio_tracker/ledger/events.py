@@ -18,6 +18,10 @@ from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 
+#: Storage width of the instrument-key column. Keys longer than this are
+#: rejected on construction, because the database truncates rather than errors.
+MAX_INSTRUMENT_KEY_LENGTH = 24
+
 
 class EventType(str, Enum):
     """What happened. Str-valued so it round-trips through the database."""
@@ -119,6 +123,15 @@ class LedgerEvent:
     def __post_init__(self) -> None:
         if not self.isin:
             raise ValueError("LedgerEvent requires an ISIN - symbols are not identity")
+        if len(self.isin) > MAX_INSTRUMENT_KEY_LENGTH:
+            # The storage column is this wide. MariaDB truncates silently
+            # rather than erroring, and a truncated key folds into lots that
+            # nothing else can match - it once reported seventeen holdings as
+            # zero. Fail here, where the cause is still visible.
+            raise ValueError(
+                f"instrument key {self.isin!r} exceeds "
+                f"{MAX_INSTRUMENT_KEY_LENGTH} characters and would be truncated"
+            )
         if self.quantity < 0:
             raise ValueError(
                 f"quantity must be unsigned ({self.quantity}); direction comes "

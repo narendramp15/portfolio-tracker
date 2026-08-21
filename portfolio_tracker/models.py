@@ -174,7 +174,10 @@ class PortfolioEventModel(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     portfolio_id = Column(Integer, ForeignKey("portfolios.id"), nullable=True, index=True)
 
-    isin = Column(String(12), nullable=False, index=True)
+    # Instrument key: a validated ISIN where known, otherwise a marked
+    # placeholder ("SYM:RELIANCE"). Wider than an ISIN's 12 characters because
+    # of those placeholders - at 12 the database silently truncated them.
+    isin = Column(String(24), nullable=False, index=True)
     symbol = Column(String(30), nullable=True)  # display only, never identity
 
     # Which demat account. Load-bearing: FIFO is applied account-wise for

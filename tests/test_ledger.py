@@ -586,3 +586,35 @@ def test_dedup_key_pairs_source_with_reference():
     event = ev(EventType.BUY, "10", "100", source="cas_nsdl", source_ref="abc")
 
     assert event.dedup_key == ("cas_nsdl", "abc")
+
+
+def test_an_over_long_instrument_key_is_rejected_not_truncated():
+    """The storage column is 24 characters and MariaDB truncates silently
+    rather than erroring. A truncated key folds into lots nothing else can
+    match - in production it reported seventeen holdings as zero against a
+    non-zero assets table. Fail at construction, where the cause is visible.
+    """
+    with pytest.raises(ValueError, match="truncated"):
+        LedgerEvent(
+            isin="SYM:" + "X" * 21,
+            event_type=EventType.BUY,
+            trade_date=datetime(2024, 1, 1),
+        )
+
+
+def test_a_placeholder_key_for_a_long_symbol_still_fits():
+    """The longest real NSE symbols must survive the SYM: prefix."""
+    key = instrument_key(None, "HAPPSTMNDS.NS")
+
+    assert key == "SYM:HAPPSTMNDS"
+    # Constructing an event with it must not raise.
+    assert LedgerEvent(
+        isin=key, event_type=EventType.BUY, trade_date=datetime(2024, 1, 1)
+    ).isin == key
+
+
+def test_a_real_isin_is_comfortably_within_the_limit():
+    from portfolio_tracker.ledger.events import MAX_INSTRUMENT_KEY_LENGTH
+
+    assert len(RELIANCE) == 12
+    assert MAX_INSTRUMENT_KEY_LENGTH >= 12

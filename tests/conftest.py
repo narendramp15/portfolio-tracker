@@ -66,14 +66,22 @@ def client(app):
     if not TESTCLIENT_AVAILABLE:
         pytest.skip("httpx not installed")
     
+    # Return every pooled connection before touching the schema. SQLAlchemy
+    # keeps connections in a pool after session.close(), and a pooled SQLite
+    # connection with an open read transaction blocks DROP TABLE with
+    # "database is locked" - failing the *next* test's setup rather than the
+    # test that left it open, which makes it look unrelated to its cause.
+    test_engine.dispose()
+
     # Create tables fresh for each test
     Base.metadata.drop_all(bind=test_engine)
     Base.metadata.create_all(bind=test_engine)
-    
+
     with TestClient(app) as test_client:
         yield test_client
-    
+
     # Cleanup after test
+    test_engine.dispose()
     Base.metadata.drop_all(bind=test_engine)
 
 
