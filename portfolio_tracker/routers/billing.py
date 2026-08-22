@@ -10,10 +10,12 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from portfolio_tracker.config import settings
 from portfolio_tracker.database import get_db
 from portfolio_tracker.deps import (PLAN_LIMITS, check_broker_limit,
                                     get_current_user,
@@ -34,6 +36,19 @@ RAZORPAY_PLAN_ID_PRO = os.getenv("RAZORPAY_PLAN_ID_PRO", "")
 RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
 
 PRO_PRICE_PAISE = 19900  # ₹199 × 100 paise
+
+
+class VerifyPaymentRequest(BaseModel):
+    """Razorpay checkout handler output.
+
+    Sent as a JSON body, never as query parameters: these identifiers are
+    bearer-equivalent for the duration of the order and query strings are
+    written to access logs, proxy logs and browser history.
+    """
+
+    payment_id: str = Field(min_length=1, max_length=100)
+    order_id: str = Field(min_length=1, max_length=100)
+    signature: str = Field(min_length=1, max_length=256)
 
 
 def _razorpay_client():
@@ -159,20 +174,31 @@ def create_razorpay_subscription(
 
 @router.post("/verify-payment")
 def verify_razorpay_payment(
-    payment_id: str = Query(...),
-    order_id: str = Query(...),
-    signature: str = Query(...),
+    body: VerifyPaymentRequest,
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Verify the Razorpay payment signature after checkout and upgrade the user to Pro.
-    The frontend calls this with the values returned by the Razorpay checkout handler.
+    Verify the Razorpay payment for a Pro upgrade and grant the tier.
+
+    A valid signature proves only that *some* real Razorpay order was paid. It
+    says nothing about who paid, how much, or whether this payment has already
+    been redeemed. All four checks are required before granting anything:
+
+      1. signature   — the order/payment pair came from Razorpay
+      2. ownership   — the order was created for *this* user
+      3. amount      — the order was for the Pro price, not a cheaper one
+      4. uniqueness  — this payment has not already been redeemed
+
+    Mirrors ``verify_options_credits_payment`` below, which already did this.
     """
     if not RAZORPAY_KEY_SECRET:
         raise HTTPException(status_code=503, detail="Payment service not configured.")
 
-    # Verify HMAC-SHA256 signature
+    order_id = body.order_id
+    payment_id = body.payment_id
+
+    # (1) Verify HMAC-SHA256 signature.
     message = f"{order_id}|{payment_id}"
     expected = hmac.new(
         RAZORPAY_KEY_SECRET.encode("utf-8"),
@@ -180,16 +206,73 @@ def verify_razorpay_payment(
         hashlib.sha256,
     ).hexdigest()
 
-    if not hmac.compare_digest(expected, signature):
+    if not hmac.compare_digest(expected, body.signature):
+        logger.warning("Rejected verify-payment for user %s: bad signature", user.id)
         raise HTTPException(status_code=400, detail="Invalid payment signature. Payment not verified.")
 
-    # Upgrade user to Pro for 30 days
+    # (2) + (3) Fetch the order server-side. Neither the payer's identity nor
+    # the amount is part of the signed payload, so both must come from Razorpay.
+    client = _razorpay_client()
+    try:
+        order = client.order.fetch(order_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Razorpay order fetch failed for %s: %s", order_id, exc)
+        raise HTTPException(
+            status_code=502, detail="Could not verify order with payment gateway."
+        ) from exc
+
+    order_user_id = str((order.get("notes") or {}).get("user_id", ""))
+    if order_user_id != str(user.id):
+        logger.warning(
+            "Rejected verify-payment: order %s belongs to user %r, caller is %s",
+            order_id, order_user_id, user.id,
+        )
+        raise HTTPException(status_code=403, detail="This payment belongs to a different account.")
+
+    if int(order.get("amount", 0)) != PRO_PRICE_PAISE:
+        logger.warning(
+            "Rejected verify-payment: order %s amount %s != Pro price %d",
+            order_id, order.get("amount"), PRO_PRICE_PAISE,
+        )
+        raise HTTPException(status_code=400, detail="Payment amount does not match the Pro plan price.")
+
+    if order.get("status") != "paid":
+        raise HTTPException(status_code=400, detail="Order is not marked paid yet. Please retry shortly.")
+
+    # (4) Replay guard. Recorded *before* the grant, so a concurrent duplicate
+    # loses the race on the UNIQUE payment_id and is rejected having granted
+    # nothing. Also gives finance a row per fulfilment to reconcile against.
+    db.add(ProcessedPaymentModel(
+        user_id=user.id,
+        payment_id=payment_id,
+        order_id=order_id,
+        purpose="pro_subscription",
+        pack_id="pro_monthly",
+        amount_paise=PRO_PRICE_PAISE,
+    ))
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="This payment has already been processed.")
+
+    # Extend rather than overwrite, so a renewal paid before expiry is not
+    # silently truncated to 30 days from today.
+    now = datetime.now(timezone.utc)
+    current_expiry = user.subscription_expires_at
+    if current_expiry is not None and current_expiry.tzinfo is None:
+        current_expiry = current_expiry.replace(tzinfo=timezone.utc)
+    base = current_expiry if (current_expiry and current_expiry > now) else now
+
     user.subscription_tier = "pro"
     user.subscription_status = "active"
-    user.subscription_expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+    user.subscription_expires_at = base + timedelta(days=30)
     db.commit()
 
-    logger.info(f"User {user.id} upgraded to Pro via order {order_id}")
+    logger.info(
+        "User %s upgraded to Pro via order %s (payment %s), expires %s",
+        user.id, order_id, payment_id, user.subscription_expires_at,
+    )
     return {"success": True, "tier": "pro", "message": "Upgraded to Pro successfully!"}
 
 
@@ -205,15 +288,21 @@ async def razorpay_webhook(
     body = await request.body()
     signature = request.headers.get("x-razorpay-signature", "")
 
-    # Verify webhook signature when secret is configured
-    if RAZORPAY_WEBHOOK_SECRET:
-        expected = hmac.new(
-            RAZORPAY_WEBHOOK_SECRET.encode("utf-8"),
-            body,
-            hashlib.sha256,
-        ).hexdigest()
-        if not hmac.compare_digest(expected, signature):
-            raise HTTPException(status_code=400, detail="Invalid webhook signature")
+    # Fail CLOSED. This endpoint is unauthenticated and grants paid tiers, so an
+    # unset secret must disable it rather than skip verification — previously a
+    # missing RAZORPAY_WEBHOOK_SECRET turned it into an open "make me Pro" API.
+    if not RAZORPAY_WEBHOOK_SECRET:
+        logger.error("Razorpay webhook received but RAZORPAY_WEBHOOK_SECRET is not configured — rejecting")
+        raise HTTPException(status_code=503, detail="Webhook processing is not configured.")
+
+    expected = hmac.new(
+        RAZORPAY_WEBHOOK_SECRET.encode("utf-8"),
+        body,
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(expected, signature):
+        logger.warning("Rejected Razorpay webhook: invalid signature")
+        raise HTTPException(status_code=400, detail="Invalid webhook signature")
 
     try:
         event_data = json.loads(body)
@@ -491,7 +580,16 @@ def buy_options_credits(
     credits_to_add, price_paise = _CREDIT_PACKS[pack_id]
 
     if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
-        # Dev mode — add credits directly without payment
+        # Absence of a Razorpay key is a misconfiguration, not a licence to give
+        # paid credits away: on a real deployment a dropped env var used to turn
+        # this endpoint into free credits for anyone who asked.
+        if settings.IS_PRODUCTION:
+            logger.error("options-credits called but Razorpay keys are not configured")
+            raise HTTPException(
+                status_code=503,
+                detail="Payment service is not configured. Contact the administrator.",
+            )
+        # Local development only — grant directly so checkout can be exercised.
         user.options_credits = (getattr(user, "options_credits", 0) or 0) + credits_to_add  # type: ignore[assignment]
         db.commit()
         logger.info("Dev mode: added %d credits to user %d", credits_to_add, user.id)

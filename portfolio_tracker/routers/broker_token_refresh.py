@@ -1,8 +1,7 @@
 """Broker token refresh and status endpoints."""
 
-from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from portfolio_tracker import crud
@@ -17,7 +16,6 @@ router = APIRouter()
 @router.post("/{broker_name}/refresh-token")
 def refresh_broker_token(
     broker_name: str,
-    token: Optional[str] = Query(default=None),
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -167,7 +165,6 @@ def refresh_broker_token(
 @router.get("/{broker_name}/status")
 def get_broker_status(
     broker_name: str,
-    token: Optional[str] = Query(default=None),
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):

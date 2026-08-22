@@ -123,9 +123,7 @@ export function BrokersPage() {
 
   const completeZerodha = useMutation({
     mutationFn: async (requestToken: string) => {
-      const { data } = await api.post('/broker/zerodha/callback', undefined, {
-        params: { request_token: requestToken },
-      })
+      const { data } = await api.post('/broker/zerodha/callback', { request_token: requestToken })
       return data
     },
     onSuccess: async () => {
@@ -136,9 +134,7 @@ export function BrokersPage() {
 
   const completeFivepaisa = useMutation({
     mutationFn: async (requestToken: string) => {
-      const { data } = await api.post('/broker/fivepaisa/callback', undefined, {
-        params: { request_token: requestToken },
-      })
+      const { data } = await api.post('/broker/fivepaisa/callback', { request_token: requestToken })
       return data
     },
     onSuccess: async () => {
@@ -149,9 +145,7 @@ export function BrokersPage() {
 
   const completeGroww = useMutation({
     mutationFn: async (code: string) => {
-      const { data } = await api.post('/broker/groww/callback', undefined, {
-        params: { request_token: code },
-      })
+      const { data } = await api.post('/broker/groww/callback', { request_token: code })
       return data
     },
     onSuccess: async () => {

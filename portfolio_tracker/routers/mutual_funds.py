@@ -5,7 +5,8 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import (APIRouter, Depends, File, Form, HTTPException, Query,
+                     UploadFile)
 from sqlalchemy.orm import Session
 
 from portfolio_tracker.deps import get_current_user, get_db
@@ -149,7 +150,11 @@ _MAX_PDF_SIZE = 10 * 1024 * 1024  # 10 MB
 @router.post("/import-cas")
 async def import_cas_pdf(
     file: UploadFile = File(...),
-    password: Optional[str] = Query(
+    # Form, not Query: the CAS password is usually PAN + date of birth, so a
+    # query parameter would write the user's PAN into every access log on the
+    # request path. This is already a multipart request, so a form field costs
+    # nothing.
+    password: Optional[str] = Form(
         default=None,
         description="PDF password (usually PAN+DOB e.g. ABCDE1234F01011990)",
     ),
@@ -162,7 +167,7 @@ async def import_cas_pdf(
     - Auto-detects CAMS vs KFintech format.
     - Existing folios are **updated** (units, NAV, values); new folios are created.
     - Duplicate transactions (same date + description + amount) are skipped.
-    - If the PDF is password-protected, pass the password as a query parameter.
+    - If the PDF is password-protected, send the password as a form field.
     """
     if file.content_type and file.content_type not in (
         "application/pdf",

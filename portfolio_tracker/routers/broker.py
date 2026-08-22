@@ -36,7 +36,6 @@ ZERODHA_NOT_CONNECTED_MSG = (
 
 @router.get("/configs", response_model=list[schemas.BrokerConfigResponse])
 def get_broker_configs(
-    token: Optional[str] = Query(default=None),
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -72,7 +71,6 @@ def get_broker_configs(
 @router.delete("/configs/{config_id}")
 def delete_broker_config(
     config_id: int,
-    token: Optional[str] = Query(default=None),
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -99,14 +97,16 @@ def delete_broker_config(
 
 @router.post("/zerodha/setup")
 def setup_zerodha_broker(
-    api_key: str = Query(...),
-    api_secret: str = Query(...),
-    consent_given: bool = Query(False),
-    token: Optional[str] = Query(default=None),
+    body: schemas.BrokerSetupRequest,
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Setup Zerodha broker with API credentials."""
+    # Credentials arrive as a JSON body, never as query parameters: query
+    # strings are written to access logs, proxy logs and browser history.
+    api_key = body.api_key
+    api_secret = body.api_secret
+    consent_given = body.consent_given
     try:
         # Test the credentials by creating a broker instance
         broker = ZerodhaBroker(api_key=api_key, api_secret=api_secret)
@@ -136,13 +136,13 @@ def setup_zerodha_broker(
 
 @router.post("/zerodha/callback")
 def zerodha_callback(
-    request_token: str = Query(...),
-    config_id: Optional[int] = Query(default=None),
-    token: Optional[str] = Query(default=None),
+    body: schemas.BrokerCallbackRequest,
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Handle Zerodha OAuth callback."""
+    request_token = body.request_token
+    config_id = body.config_id
     try:
         if config_id is not None:
             config = broker_configs.get_broker_config(db, config_id)
@@ -187,7 +187,6 @@ def zerodha_callback(
 
 @router.get("/zerodha/login-url")
 def get_zerodha_login_url(
-    token: Optional[str] = Query(default=None),
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -277,7 +276,6 @@ def _authorized_zerodha_client(config) -> ZerodhaBroker:
 @router.post("/zerodha/sync-holdings", response_model=schemas.BrokerSyncResponse)
 def sync_zerodha_holdings(
     portfolio_id: int = Query(...),
-    token: Optional[str] = Query(default=None),
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -320,7 +318,6 @@ def sync_zerodha_holdings(
 def sync_zerodha_transactions(
     portfolio_id: int = Query(...),
     historical: bool = Query(default=False, description="Fetch historical trades (all orders) instead of recent trades only"),
-    token: Optional[str] = Query(default=None),
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -369,14 +366,16 @@ def sync_zerodha_transactions(
 
 @router.post("/angel/setup")
 def setup_angel_broker(
-    api_key: str = Query(...),
-    api_secret: str = Query(...),
-    consent_given: bool = Query(False),
-    token: Optional[str] = Query(default=None),
+    body: schemas.BrokerSetupRequest,
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Setup Angel broker with API credentials."""
+    # Credentials arrive as a JSON body, never as query parameters: query
+    # strings are written to access logs, proxy logs and browser history.
+    api_key = body.api_key
+    api_secret = body.api_secret
+    consent_given = body.consent_given
     try:
         from portfolio_tracker.brokers.angel import AngelBroker
 
@@ -408,7 +407,6 @@ def setup_angel_broker(
 @router.post("/angel/sync-holdings", response_model=schemas.BrokerSyncResponse)
 def sync_angel_holdings(
     portfolio_id: int = Query(...),
-    token: Optional[str] = Query(default=None),
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -463,16 +461,7 @@ def _fivepaisa_client(config):
 
 @router.post("/fivepaisa/setup")
 def setup_fivepaisa_broker(
-    user_key: Optional[str] = Query(None, description="5Paisa User Key (VendorKey)"),
-    encryption_key: Optional[str] = Query(None, description="5Paisa Encryption Key"),
-    api_key: Optional[str] = Query(None, description="Legacy alias for user_key"),
-    api_secret: Optional[str] = Query(None, description="Legacy alias for encryption_key"),
-    app_name: Optional[str] = Query(None, description="5Paisa App Name"),
-    app_source: Optional[str] = Query(None, description="5Paisa App Source"),
-    user_id_5p: Optional[str] = Query(None, description="5Paisa User ID"),
-    password: Optional[str] = Query(None, description="5Paisa Password"),
-    consent_given: bool = Query(False),
-    token: Optional[str] = Query(default=None),
+    body: schemas.FivePaisaSetupRequest,
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -482,14 +471,17 @@ def setup_fivepaisa_broker(
     `user_key` / `encryption_key`) and makes the extra fields optional so tests
     that only supply `api_key`/`api_secret` continue to work.
     """
+    # Credentials arrive as a JSON body, never as query parameters: query
+    # strings are written to access logs, proxy logs and browser history.
+    consent_given = body.consent_given
     # Support legacy param names and provide sensible defaults for optional fields
-    effective_user_key = user_key or api_key
-    effective_encryption_key = encryption_key or api_secret
+    effective_user_key = body.user_key or body.api_key
+    effective_encryption_key = body.encryption_key or body.api_secret
     extra_config = {
-        "app_name": app_name or "",
-        "app_source": app_source or "",
-        "user_id": user_id_5p or "",
-        "password": password or "",
+        "app_name": body.app_name or "",
+        "app_source": body.app_source or "",
+        "user_id": body.user_id_5p or "",
+        "password": body.password or "",
     }
 
     try:
@@ -527,7 +519,6 @@ def setup_fivepaisa_broker(
 
 @router.get("/fivepaisa/login-url")
 def get_fivepaisa_login_url(
-    token: Optional[str] = Query(default=None),
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -550,12 +541,12 @@ def get_fivepaisa_login_url(
 
 @router.post("/fivepaisa/callback")
 def fivepaisa_oauth_callback(
-    request_token: str = Query(..., description="OAuth request token from 5Paisa redirect"),
-    token: Optional[str] = Query(default=None),
+    body: schemas.BrokerCallbackRequest,
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Complete 5Paisa OAuth flow with request token."""
+    request_token = body.request_token
     try:
         config = broker_accounts.get_config_or_error(
             db, user.id, "fivepaisa",
@@ -597,7 +588,6 @@ def fivepaisa_oauth_callback(
 @router.post("/fivepaisa/sync-holdings", response_model=schemas.BrokerSyncResponse)
 def sync_fivepaisa_holdings(
     portfolio_id: int = Query(...),
-    token: Optional[str] = Query(default=None),
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -638,14 +628,16 @@ def sync_fivepaisa_holdings(
 
 @router.post("/dhan/setup")
 def setup_dhan_broker(
-    client_id: str = Query(..., description="Dhan Client ID from developer portal"),
-    access_token: str = Query(..., description="Dhan Access Token from developer portal"),
-    consent_given: bool = Query(False),
-    token: Optional[str] = Query(default=None),
+    body: schemas.DhanSetupRequest,
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Setup Dhan broker with Client ID and Access Token (no OAuth redirect needed)."""
+    # Credentials arrive as a JSON body, never as query parameters: query
+    # strings are written to access logs, proxy logs and browser history.
+    client_id = body.client_id
+    access_token = body.access_token
+    consent_given = body.consent_given
     try:
         from portfolio_tracker.brokers.dhan import DhanBroker
 
@@ -677,7 +669,6 @@ def setup_dhan_broker(
 @router.post("/dhan/sync-holdings", response_model=schemas.BrokerSyncResponse)
 def sync_dhan_holdings(
     portfolio_id: int = Query(...),
-    token: Optional[str] = Query(default=None),
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -717,14 +708,16 @@ def sync_dhan_holdings(
 
 @router.post("/groww/setup")
 def setup_groww_broker(
-    api_key: str = Query(..., description="Groww Client ID / API Key"),
-    api_secret: str = Query(..., description="Groww Client Secret / API Secret"),
-    consent_given: bool = Query(False),
-    token: Optional[str] = Query(default=None),
+    body: schemas.BrokerSetupRequest,
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Save Groww API credentials and return OAuth login URL."""
+    # Credentials arrive as a JSON body, never as query parameters: query
+    # strings are written to access logs, proxy logs and browser history.
+    api_key = body.api_key
+    api_secret = body.api_secret
+    consent_given = body.consent_given
     try:
         from portfolio_tracker.brokers.groww import GrowwBroker
 
@@ -755,7 +748,6 @@ def setup_groww_broker(
 
 @router.get("/groww/login-url")
 def get_groww_login_url(
-    token: Optional[str] = Query(default=None),
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -780,12 +772,12 @@ def get_groww_login_url(
 
 @router.post("/groww/callback")
 def groww_callback(
-    request_token: str = Query(..., description="Authorization code from Groww OAuth redirect"),
-    token: Optional[str] = Query(default=None),
+    body: schemas.BrokerCallbackRequest,
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Complete Groww OAuth flow with the authorization code."""
+    request_token = body.request_token
     try:
         from portfolio_tracker.brokers.groww import GrowwBroker
 
@@ -819,7 +811,6 @@ def groww_callback(
 @router.post("/groww/sync-holdings", response_model=schemas.BrokerSyncResponse)
 def sync_groww_holdings(
     portfolio_id: int = Query(...),
-    token: Optional[str] = Query(default=None),
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):

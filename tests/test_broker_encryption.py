@@ -2,7 +2,8 @@
 
 import pytest
 
-from portfolio_tracker.encryption import EncryptionManager
+from portfolio_tracker.encryption import (CredentialDecryptError,
+                                          EncryptionManager)
 
 
 class TestEncryptionManager:
@@ -66,20 +67,27 @@ class TestEncryptionManager:
         
         assert decrypted == original_data
     
-    def test_decrypt_invalid_format(self):
-        """Test decryption of invalid format returns None or empty string."""
-        result = EncryptionManager.decrypt("not-a-valid-encrypted-string")
-        # Should return empty string or None gracefully
-        assert result in ["", None] or result == ""
-    
-    def test_decrypt_tampered_data(self):
-        """Test decryption of tampered data returns None or empty string."""
-        original_data = "my_secret_data"
-        encrypted = EncryptionManager.encrypt(original_data)
-        
+    def test_decrypt_invalid_format_raises(self):
+        """Undecryptable input must raise, not return an empty string.
+
+        The old behaviour returned "" here, which the callers could not tell
+        apart from "this user has no stored credential" — so a changed
+        ENCRYPTION_KEY surfaced to users as "broker not connected" rather than
+        as an error anyone could act on.
+        """
+        with pytest.raises(CredentialDecryptError):
+            EncryptionManager.decrypt("not-a-valid-encrypted-string")
+
+    def test_decrypt_tampered_data_raises(self):
+        """Tampered ciphertext must raise rather than degrade silently."""
+        encrypted = EncryptionManager.encrypt("my_secret_data")
+
         # Tamper with the encrypted data
         tampered = encrypted[:-10] + "0000000000"
-        
-        result = EncryptionManager.decrypt(tampered)
-        # Should return empty string or None gracefully
-        assert result in ["", None] or result == ""
+
+        with pytest.raises(CredentialDecryptError):
+            EncryptionManager.decrypt(tampered)
+
+    def test_decrypt_empty_string_is_not_an_error(self):
+        """An absent credential is genuinely empty and stays empty."""
+        assert EncryptionManager.decrypt("") == ""

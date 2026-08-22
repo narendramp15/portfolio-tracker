@@ -67,12 +67,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
         localStorage.setItem('user', JSON.stringify(resp.data))
         setToken(stored)
       } catch (err: any) {
-        // On 401 or other errors, clear auth state
+        // ONLY a 401 means the token is actually bad. Logging out on anything
+        // else (a network blip, a 500, a cold-started backend) signed every
+        // user out on a transient failure and lost their session for no reason.
+        // The axios response interceptor already clears storage on a 401, so
+        // this branch just syncs React state with that.
         if (err?.response?.status === 401) {
           logout()
         } else {
-          // Treat other errors as unauthenticated to be safe
-          logout()
+          console.error('Could not validate session; keeping stored credentials', err)
         }
       } finally {
         if (mounted) setAuthReady(true)

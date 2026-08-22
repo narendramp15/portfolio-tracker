@@ -95,8 +95,16 @@ extend-exclude = '''
 [tool.ruff]
 line-length = 100
 target-version = "py313"
+
+[tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "C4", "UP"]
-ignore = ["E501"]
+ignore = [
+    "E501",  # line length is handled by the formatter
+    # B008 fires on every FastAPI `Depends()` / `Query()` default, which is the
+    # framework's documented idiom, not a bug. 166 of the repo's findings were
+    # this rule alone.
+    "B008",
+]
 
 [tool.mypy]
 python_version = "3.13"

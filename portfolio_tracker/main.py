@@ -19,11 +19,12 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 from portfolio_tracker.api.middleware import (CORSPreflightMiddleware,
-                                              RequestLoggingMiddleware)
+                                              RequestLoggingMiddleware,
+                                              SecurityHeadersMiddleware)
 from portfolio_tracker.api.pages import mount_static
 from portfolio_tracker.api.pages import router as pages_router
 from portfolio_tracker.api.routes import register_routes
-from portfolio_tracker.config import settings
+from portfolio_tracker.config import settings, validate_or_die
 from portfolio_tracker.database import create_tables
 
 # Configure logging
@@ -60,6 +61,9 @@ def create_app() -> FastAPI:
         expose_headers=["Content-Disposition", "X-Total-Count"],
         max_age=3600,
     )
+    # Added last => outermost of the FastAPI stack, so the headers land on every
+    # response including those short-circuited by CORSMiddleware.
+    app.add_middleware(SecurityHeadersMiddleware)
 
     mount_static(app)
     register_routes(app)
@@ -67,6 +71,11 @@ def create_app() -> FastAPI:
 
     return app
 
+
+# Refuse to boot a real deployment that is missing critical secrets. This runs
+# before anything touches the database or serves a request, because both of the
+# secrets it checks have silent, unsafe fallbacks.
+validate_or_die()
 
 # Create tables on startup
 create_tables()

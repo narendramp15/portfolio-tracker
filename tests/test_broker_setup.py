@@ -23,7 +23,7 @@ class TestBrokerSetup:
         """Test successful Zerodha broker setup."""
         response = client.post(
             "/api/broker/zerodha/setup",
-            params={
+            json={
                 "api_key": "test_api_key",
                 "api_secret": "test_api_secret",
             },
@@ -38,7 +38,7 @@ class TestBrokerSetup:
         """Test successful Angel broker setup."""
         response = client.post(
             "/api/broker/angel/setup",
-            params={
+            json={
                 "api_key": "test_api_key",
                 "api_secret": "test_api_secret",
             },
@@ -51,7 +51,7 @@ class TestBrokerSetup:
         """Test successful 5Paisa broker setup."""
         response = client.post(
             "/api/broker/fivepaisa/setup",
-            params={
+            json={
                 "api_key": "test_api_key",
                 "api_secret": "test_api_secret",
             },
@@ -64,12 +64,26 @@ class TestBrokerSetup:
         """Test broker setup fails without credentials."""
         response = client.post(
             "/api/broker/zerodha/setup",
-            params={},
+            json={},
             headers=auth_headers
         )
-        
-        # Should fail due to missing required parameters
-        assert response.status_code in [400, 422]
+
+        # Should fail due to missing required body fields
+        assert response.status_code == 422
+
+    def test_setup_rejects_credentials_in_query_params(self, client, test_user, auth_headers):
+        """Credentials passed as query parameters must NOT be accepted.
+
+        Regression guard: they used to be the only accepted form, which wrote
+        broker API secrets into every access log in the request path.
+        """
+        response = client.post(
+            "/api/broker/zerodha/setup",
+            params={"api_key": "test_api_key", "api_secret": "test_api_secret"},
+            headers=auth_headers
+        )
+
+        assert response.status_code == 422
     
     def test_get_broker_configs(self, client, test_user, auth_headers):
         """Test getting broker configurations."""

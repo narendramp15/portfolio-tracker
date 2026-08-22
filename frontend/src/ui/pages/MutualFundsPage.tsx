@@ -101,10 +101,10 @@ export function MutualFundsPage() {
             if (!file) throw new Error('Select a PDF file')
             const form = new FormData()
             form.append('file', file)
-            const params: Record<string, string> = {}
-            if (password) params.password = password
+            // The CAS password is normally PAN + date of birth. It goes in the
+            // multipart body, never the query string.
+            if (password) form.append('password', password)
             const { data } = await api.post<CASImportResult>('/mutual-funds/import-cas', form, {
-                params,
                 headers: { 'Content-Type': undefined },
             })
             return data

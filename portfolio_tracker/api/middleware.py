@@ -93,10 +93,70 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     """Log every request/response pair with origin for CORS debugging."""
 
     async def dispatch(self, request: Request, call_next):
+        # DEBUG, not INFO: at INFO this logged the full path of every request —
+        # including any credential that had been passed as a query parameter —
+        # into the default production log stream.
         origin = request.headers.get('origin', 'None')
-        logger.info(f"Incoming: {request.method} {request.url.path} - Origin: {origin}")
+        logger.debug("Incoming: %s %s - Origin: %s", request.method, request.url.path, origin)
 
         response = await call_next(request)
 
-        logger.info(f"Response: {request.method} {request.url.path} - Status: {response.status_code}")
+        logger.debug(
+            "Response: %s %s - Status: %s",
+            request.method, request.url.path, response.status_code,
+        )
+        return response
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Attach the standard hardening headers to every response.
+
+    ``Referrer-Policy`` is the load-bearing one here: it stops any credential
+    that still reaches a URL from leaking to third parties via the Referer
+    header. The CSP is the main remaining mitigation against an XSS payload
+    reading the access token out of localStorage.
+    """
+
+    # Kept permissive enough for the SPA (Vite emits inline style attributes)
+    # and the Razorpay checkout, which loads its own script and iframes.
+    _CSP = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com data:; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self' https://api.razorpay.com https://lumberjack.razorpay.com; "
+        "frame-src https://api.razorpay.com https://checkout.razorpay.com; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "object-src 'none'"
+    )
+
+    _STATIC_HEADERS = {
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "no-referrer",
+        "Permissions-Policy": "geolocation=(), microphone=(), camera=(), payment=(self)",
+        "Cross-Origin-Opener-Policy": "same-origin",
+    }
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+
+        for header, value in self._STATIC_HEADERS.items():
+            response.headers.setdefault(header, value)
+
+        # /docs and /redoc pull Swagger assets from a CDN; a strict CSP would
+        # blank them out. Everything else gets the policy.
+        if not request.url.path.startswith(("/docs", "/redoc", "/openapi.json")):
+            response.headers.setdefault("Content-Security-Policy", self._CSP)
+
+        # HSTS only makes sense once TLS terminates in front of us, and sending
+        # it over plain HTTP in local dev pins localhost to https in the browser.
+        if settings.IS_PRODUCTION:
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
+
         return response

@@ -23,6 +23,12 @@ export function AuthCallbackPage() {
             // Store the JWT token first (for the axios interceptor)
             localStorage.setItem('access_token', token)
 
+            // Scrub the token out of the URL immediately: the OAuth callback
+            // hands it over as a query parameter, which otherwise persists in
+            // browser history and in any Referer sent from this page.
+            // The real fix is a one-time exchange code — see the audit.
+            window.history.replaceState({}, '', '/auth/callback')
+
             // Fetch user info from /auth/me endpoint
             api.get<User>('/auth/me')
                 .then(response => {

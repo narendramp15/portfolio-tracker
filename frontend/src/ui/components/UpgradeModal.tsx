@@ -67,12 +67,10 @@ export function UpgradeModal({ open, onClose, reason }: Props) {
                 theme: { color: '#6366f1' },
                 handler: async (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => {
                     try {
-                        await api.post('/billing/verify-payment', null, {
-                            params: {
-                                payment_id: response.razorpay_payment_id,
-                                order_id: response.razorpay_order_id,
-                                signature: response.razorpay_signature,
-                            },
+                        await api.post('/billing/verify-payment', {
+                            payment_id: response.razorpay_payment_id,
+                            order_id: response.razorpay_order_id,
+                            signature: response.razorpay_signature,
                         })
                         invalidate()
                         setSuccess(true)

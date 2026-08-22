@@ -13,7 +13,8 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from portfolio_tracker.encryption import EncryptionManager
+from portfolio_tracker.encryption import (CredentialDecryptError,
+                                          EncryptionManager)
 from portfolio_tracker.models import BrokerConfigModel, UserModel
 from portfolio_tracker.repositories import broker_configs
 from portfolio_tracker.services.entitlements import check_broker_limit
@@ -44,10 +45,25 @@ def get_config_or_error(
 
 
 def decrypt_credentials(config: BrokerConfigModel) -> tuple[str, str, str]:
-    """Return (api_key, api_secret, access_token) in plaintext ('' when unset)."""
-    api_key = EncryptionManager.decrypt(config.api_key or "")
-    api_secret = EncryptionManager.decrypt(config.api_secret or "")
-    access_token = EncryptionManager.decrypt(config.access_token) if config.access_token else ""
+    """Return (api_key, api_secret, access_token) in plaintext ('' when unset).
+
+    Raises:
+        CredentialDecryptError: if the stored ciphertext does not match the
+            current ENCRYPTION_KEY. This is deliberately not swallowed — the
+            silent version reported a key rotation to the user as "broker not
+            connected", which is indistinguishable from never having connected.
+    """
+    try:
+        api_key = EncryptionManager.decrypt(config.api_key or "")
+        api_secret = EncryptionManager.decrypt(config.api_secret or "")
+        access_token = EncryptionManager.decrypt(config.access_token) if config.access_token else ""
+    except CredentialDecryptError:
+        logger.error(
+            "ENCRYPTION_KEY mismatch on broker_config id=%s broker=%s user_id=%s — "
+            "stored credentials are unreadable and the connection must be re-authorised",
+            config.id, config.broker_name, config.user_id,
+        )
+        raise
     return api_key, api_secret, access_token
 
 
@@ -57,8 +73,16 @@ def load_extra_config(config: BrokerConfigModel) -> dict:
         return {}
     try:
         return json.loads(EncryptionManager.decrypt(config.extra_config))
+    except CredentialDecryptError:
+        # Extras are optional per broker, so degrade rather than fail the whole
+        # request — but log loudly: this means the key changed.
+        logger.error(
+            "ENCRYPTION_KEY mismatch decrypting extra_config for broker_config id=%s",
+            config.id,
+        )
+        return {}
     except Exception as e:
-        logger.warning(f"Failed to decrypt extra_config: {e}")
+        logger.warning("Malformed extra_config on broker_config id=%s: %s", config.id, e)
         return {}
 
 

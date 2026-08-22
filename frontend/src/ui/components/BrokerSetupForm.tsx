@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Loader2, Plus, X } from 'lucide-react'
 
-import { api } from '../../lib/api'
+import { api, apiErrorMessage } from '../../lib/api'
 import { Card } from './Card'
 
 type BrokerType = 'zerodha' | 'angel' | 'fivepaisa' | 'groww' | 'dhan'
@@ -50,8 +50,10 @@ export function BrokerSetupForm({ brokerType, brokerName, onSuccess }: BrokerSet
         setIsLoading(true)
 
         try {
-            // Build params based on broker type
-            const params: Record<string, string> = isFivePaisa
+            // Sent as a JSON body, not query params: these are live broker API
+            // secrets and account passwords, and query strings end up in server
+            // access logs and browser history.
+            const body: Record<string, string | boolean> = isFivePaisa
                 ? {
                     user_key: apiKey,
                     encryption_key: apiSecret,
@@ -59,21 +61,21 @@ export function BrokerSetupForm({ brokerType, brokerName, onSuccess }: BrokerSet
                     app_source: appSource,
                     user_id_5p: userId5p,
                     password: password5p,
-                    consent_given: consentGiven.toString(),
+                    consent_given: consentGiven,
                 }
                 : isDhan
                     ? {
                         client_id: apiKey,
                         access_token: apiSecret,
-                        consent_given: consentGiven.toString(),
+                        consent_given: consentGiven,
                     }
                     : {
                         api_key: apiKey,
                         api_secret: apiSecret,
-                        consent_given: consentGiven.toString(),
+                        consent_given: consentGiven,
                     }
 
-            const response = await api.post(`/broker/${brokerType}/setup`, undefined, { params })
+            const response = await api.post(`/broker/${brokerType}/setup`, body)
 
             if (response.data.success) {
                 const loginUrl = response.data.login_url as string | undefined
@@ -96,7 +98,7 @@ export function BrokerSetupForm({ brokerType, brokerName, onSuccess }: BrokerSet
                 }
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to setup broker')
+            setError(apiErrorMessage(err, 'Failed to set up broker'))
         } finally {
             setIsLoading(false)
         }

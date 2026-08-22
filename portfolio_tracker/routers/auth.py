@@ -41,7 +41,7 @@ oauth.register(
 async def register(request: Request, user_data: schemas.UserRegister, db: Session = Depends(get_db)):
     """Register a new user."""
     register_rate_limiter.check(request)
-    logger.info(f"Registration attempt for email: {user_data.email}, username: {user_data.username}")
+    logger.info("Registration attempt received")
     
     # Check if user already exists
     existing_user = db.query(models.UserModel).filter(
@@ -50,7 +50,7 @@ async def register(request: Request, user_data: schemas.UserRegister, db: Sessio
     ).first()
     
     if existing_user:
-        logger.warning(f"Registration failed - email/username already exists: {user_data.email}/{user_data.username}")
+        logger.warning("Registration rejected - email or username already exists")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email or username already registered"
@@ -70,7 +70,7 @@ async def register(request: Request, user_data: schemas.UserRegister, db: Sessio
     db.commit()
     db.refresh(user)
     
-    logger.info(f"User registered successfully: {user.email} (ID: {user.id})")
+    logger.info("User registered successfully: user_id=%s", user.id)
     
     # Create access token
     access_token = create_access_token(
@@ -96,7 +96,7 @@ async def register(request: Request, user_data: schemas.UserRegister, db: Sessio
 async def login(request: Request, user_data: schemas.UserLogin, db: Session = Depends(get_db)):
     """Login with email and password."""
     auth_rate_limiter.check(request)
-    logger.info(f"Login attempt for email: {user_data.email}")
+    logger.debug("Login attempt received")
     
     # Find user by email
     user = db.query(models.UserModel).filter(
@@ -104,7 +104,7 @@ async def login(request: Request, user_data: schemas.UserLogin, db: Session = De
     ).first()
     
     if not user or not verify_password(user_data.password, user.hashed_password):
-        logger.warning(f"Login failed - invalid credentials for: {user_data.email}")
+        logger.warning("Login failed - invalid credentials")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
@@ -112,7 +112,7 @@ async def login(request: Request, user_data: schemas.UserLogin, db: Session = De
         )
     
     if not user.is_active:
-        logger.warning(f"Login failed - inactive account: {user_data.email}")
+        logger.warning("Login failed - inactive account: user_id=%s", user.id)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is inactive"
@@ -124,7 +124,7 @@ async def login(request: Request, user_data: schemas.UserLogin, db: Session = De
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     
-    logger.info(f"Login successful for: {user.email} (ID: {user.id})")
+    logger.info("Login successful: user_id=%s", user.id)
     
     return {
         "access_token": access_token,
@@ -143,7 +143,7 @@ async def login(request: Request, user_data: schemas.UserLogin, db: Session = De
 @router.get("/me", response_model=schemas.UserResponse)
 async def get_current_user_endpoint(current_user: models.UserModel = Depends(get_current_user)):
     """Get current authenticated user."""
-    logger.debug(f"User info requested: {current_user.email}")
+    logger.debug("User info requested: user_id=%s", current_user.id)
     return current_user
 
 
@@ -194,10 +194,14 @@ async def forgot_password(
 
 @router.post("/reset-password", response_model=schemas.MessageResponse)
 async def reset_password(
+    http_request: Request,
     request: schemas.PasswordReset,
     db: Session = Depends(get_db)
 ):
     """Reset password using a valid token."""
+    # The limiter guarded /forgot-password but was never added here, leaving the
+    # token-redemption endpoint itself unthrottled.
+    password_reset_rate_limiter.check(http_request)
     # Find the reset token
     reset_token = db.query(models.PasswordResetTokenModel).filter(
         models.PasswordResetTokenModel.token == request.token,
@@ -274,7 +278,7 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         full_name = user_info.get('name', '')
         google_id = user_info.get('sub')  # Google's unique user ID
         
-        logger.info(f"Google OAuth user info retrieved - Email: {email}, Name: {full_name}, Google ID: {google_id}")
+        logger.debug("Google OAuth user info retrieved")
         
         if not email:
             logger.error("Email not provided by Google")
@@ -289,7 +293,7 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         ).first()
         
         if not user:
-            logger.info(f"Creating new user via Google OAuth: {email}")
+            logger.info("Creating new user via Google OAuth")
             # Create new user with Google OAuth
             # Generate a random username from email
             username = email.split('@')[0]
@@ -313,9 +317,9 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
             db.add(user)
             db.commit()
             db.refresh(user)
-            logger.info(f"Google OAuth user created successfully: {email} (ID: {user.id}, Username: {username})")
+            logger.info("Google OAuth user created: user_id=%s", user.id)
         else:
-            logger.info(f"Existing user logged in via Google OAuth: {email} (ID: {user.id})")
+            logger.info("Existing user logged in via Google OAuth: user_id=%s", user.id)
         
         # Create access token
         access_token = create_access_token(

@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "echo \"Skipping tests\" && exit 0",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit",
     "test:watch": "vitest --watch"
   },
   "dependencies": {

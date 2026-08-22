@@ -245,6 +245,57 @@ class BrokerConfigCreate(BrokerConfigBase):
     api_key: Optional[str] = Field(None, description="Broker API key")
 
 
+# ---------------------------------------------------------------------------
+# Broker credential submission
+#
+# These MUST be request bodies, never query parameters. Query strings are
+# written verbatim to web-server access logs, reverse-proxy logs, browser
+# history and Referer headers — none of which are under our control, and all of
+# which would then hold live broker API secrets and account passwords.
+# ---------------------------------------------------------------------------
+
+
+class BrokerSetupRequest(BaseModel):
+    """API key/secret pair used by Zerodha, Upstox and Groww setup."""
+
+    api_key: str = Field(..., min_length=1, max_length=200, description="Broker API key")
+    api_secret: str = Field(..., min_length=1, max_length=500, description="Broker API secret")
+    consent_given: bool = Field(default=False, description="User consented to credential storage")
+
+
+class DhanSetupRequest(BaseModel):
+    """Dhan issues a long-lived access token directly, with no OAuth exchange."""
+
+    client_id: str = Field(..., min_length=1, max_length=200, description="Dhan Client ID")
+    access_token: str = Field(..., min_length=1, max_length=2000, description="Dhan Access Token")
+    consent_given: bool = Field(default=False)
+
+
+class FivePaisaSetupRequest(BaseModel):
+    """5Paisa needs app-level credentials plus the user's own login password."""
+
+    user_key: Optional[str] = Field(None, max_length=200, description="5Paisa User Key (VendorKey)")
+    encryption_key: Optional[str] = Field(None, max_length=500, description="5Paisa Encryption Key")
+    api_key: Optional[str] = Field(None, max_length=200, description="Legacy alias for user_key")
+    api_secret: Optional[str] = Field(None, max_length=500, description="Legacy alias for encryption_key")
+    app_name: Optional[str] = Field(None, max_length=200)
+    app_source: Optional[str] = Field(None, max_length=200)
+    user_id_5p: Optional[str] = Field(None, max_length=200, description="5Paisa User ID")
+    password: Optional[str] = Field(None, max_length=200, description="5Paisa Password")
+    consent_given: bool = Field(default=False)
+
+
+class BrokerCallbackRequest(BaseModel):
+    """OAuth request token returned by a broker redirect.
+
+    Short-lived, but still single-use proof of authorisation — it is exchanged
+    for an access token, so it does not belong in a URL either.
+    """
+
+    request_token: str = Field(..., min_length=1, max_length=2000)
+    config_id: Optional[int] = Field(default=None)
+
+
 class BrokerConfigResponse(BrokerConfigBase):
     """Schema for broker configuration response."""
 

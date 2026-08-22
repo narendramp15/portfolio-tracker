@@ -29,6 +29,10 @@ from typing import Optional
 
 from dotenv import load_dotenv
 
+# The placeholder shipped for local development. Deploying with this value
+# means every JWT in the system is forgeable, so startup refuses it.
+DEV_SECRET_KEY_DEFAULT = "dev-secret-key-change-in-production"
+
 
 class Settings:
     """
@@ -114,10 +118,23 @@ class Settings:
     # ===================
     
     @property
+    def ENVIRONMENT(self) -> str:
+        """Deployment environment: development | staging | production.
+
+        Anything other than "development" (and outside TESTING) is treated as a
+        real deployment by ``validate_or_die`` and must supply real secrets.
+        """
+        return os.getenv("ENVIRONMENT", "development").strip().lower()
+
+    @property
+    def IS_PRODUCTION(self) -> bool:
+        """True when this process is running as a real deployment."""
+        return not self._testing and self.ENVIRONMENT != "development"
+
+    @property
     def SECRET_KEY(self) -> str:
         """Secret key for JWT tokens."""
-        default = "dev-secret-key-change-in-production"
-        return os.getenv("SECRET_KEY", default)
+        return os.getenv("SECRET_KEY", DEV_SECRET_KEY_DEFAULT)
     
     @property
     def ENCRYPTION_KEY(self) -> Optional[str]:
@@ -301,3 +318,40 @@ def get_settings() -> Settings:
 
 # Singleton instance for easy import
 settings = get_settings()
+
+
+class ConfigurationError(RuntimeError):
+    """Raised at startup when a deployment is missing a required secret."""
+
+
+def validate_or_die(cfg: "Settings | None" = None) -> None:
+    """Refuse to start a real deployment that is missing critical secrets.
+
+    Rationale: every one of these has a "working" fallback that fails silently
+    and unsafely — a default signing key accepts forged tokens for every
+    account, and a generated encryption key orphans stored broker credentials.
+    Crashing at boot is strictly better than either.
+    """
+    cfg = cfg or settings
+    if not cfg.IS_PRODUCTION:
+        return
+
+    problems: list[str] = []
+
+    if not cfg.SECRET_KEY or cfg.SECRET_KEY == DEV_SECRET_KEY_DEFAULT:
+        problems.append(
+            "SECRET_KEY is unset or still the development default — JWTs would be forgeable"
+        )
+    elif len(cfg.SECRET_KEY) < 32:
+        problems.append("SECRET_KEY is shorter than 32 characters")
+
+    if not cfg.ENCRYPTION_KEY:
+        problems.append(
+            "ENCRYPTION_KEY is unset — stored broker credentials would become unreadable"
+        )
+
+    if problems:
+        raise ConfigurationError(
+            f"refusing to start in ENVIRONMENT={cfg.ENVIRONMENT}:\n  - "
+            + "\n  - ".join(problems)
+        )

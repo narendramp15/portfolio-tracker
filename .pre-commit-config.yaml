@@ -1,7 +1,47 @@
-[build-system]
-requires = ["flit_core >=3.2,<4"]
-build-backend = "flit_core.buildapi"
+# The previous contents of this file were a pasted [build-system] TOML block,
+# which meant pre-commit could not parse it and no hook has ever run.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: detect-private-key
 
-[tool:pytest]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.2
+    hooks:
+      - id: ruff
+        args: [--fix]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      # Repo-specific regression guard. Credentials as query parameters is the
+      # bug class this codebase actually had: broker API secrets, a 5Paisa
+      # account password and the JWT itself all travelled in query strings, and
+      # therefore into access logs. Block the shape, not just the instance.
+      - id: no-secrets-in-query-params
+        name: no credentials as query parameters
+        entry: >
+          bash -c '! grep -rnE
+          "(api_secret|api_key|encryption_key|password|access_token|client_id|request_token|signature|payment_id)[[:space:]]*:[[:space:]]*(Optional\[)?str\]?[[:space:]]*=[[:space:]]*Query"
+          portfolio_tracker/'
+        language: system
+        pass_filenames: false
+
+      # /health/db published the database host, name and port unauthenticated.
+      - id: no-db-introspection-endpoint
+        name: no unauthenticated database introspection endpoint
+        entry: bash -c '! grep -rn "health/db" portfolio_tracker/'
+        language: system
+        pass_filenames: false
