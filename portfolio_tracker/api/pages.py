@@ -18,25 +18,26 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 SPA_DIST_DIR = BASE_DIR / "frontend" / "dist"
 SPA_INDEX = SPA_DIST_DIR / "index.html"
 SPA_ASSETS_DIR = SPA_DIST_DIR / "assets"
-ACME_CHALLENGE_DIR = BASE_DIR / ".well-known" / "acme-challenge"
+WELL_KNOWN_DIR = BASE_DIR / ".well-known"
 
 
-@router.get("/.well-known/acme-challenge/{token}")
-async def acme_challenge(token: str):
-    """Serve Let's Encrypt HTTP-01 challenge files directly from disk.
+@router.get("/.well-known/{path:path}")
+async def well_known(path: str):
+    """Serve domain-validation files (.well-known/*) directly from disk.
 
     On this deployment every request is proxied through Passenger to this
     app (no .htaccess static-file fallback — see deploye_to_milesweb.md), so
-    without this route domain validation for api.quantleap.in silently fails
-    and the CA issues a cert missing that name while other, pre-validated
-    names on the account still succeed.
+    without this route certificate domain validation silently fails and the
+    CA issues certs missing api.quantleap.in. Covers both Let's Encrypt
+    HTTP-01 (acme-challenge/) and cPanel AutoSSL DCV (pki-validation/) —
+    AutoSSL runs on a schedule and reinstalls its cert over manually issued
+    ones, so its validation path must work too or the fix keeps regressing.
     """
-    if "/" in token or ".." in token:
+    base = WELL_KNOWN_DIR.resolve()
+    target = (WELL_KNOWN_DIR / path).resolve()
+    if not target.is_relative_to(base) or not target.is_file():
         raise HTTPException(status_code=404)
-    path = ACME_CHALLENGE_DIR / token
-    if not path.is_file():
-        raise HTTPException(status_code=404)
-    return FileResponse(path, media_type="text/plain")
+    return FileResponse(target, media_type="text/plain")
 
 
 def spa_available() -> bool:

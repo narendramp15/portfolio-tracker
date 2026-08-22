@@ -82,19 +82,27 @@ class Settings:
             import tempfile
             return f"sqlite:///{tempfile.gettempdir()}/test_portfolio.db"
         
+        # An explicit DATABASE_URL always wins. Hosting panels (cPanel Python
+        # Selector) can leave stale PG* vars injected into the process env
+        # after they're deleted from the UI; the full connection string is the
+        # more specific intent and must not be silently overridden by them.
+        explicit_url = os.getenv("DATABASE_URL")
+        if explicit_url:
+            return explicit_url
+
         # Try individual PostgreSQL variables (Neon/Supabase style)
         pg_user = os.getenv("PGUSER")
         pg_password = os.getenv("PGPASSWORD")
         pg_host = os.getenv("PGHOST")
         pg_port = os.getenv("PGPORT", "5432")
         pg_database = os.getenv("PGDATABASE")
-        
+
         if all([pg_user, pg_password, pg_host, pg_database]):
             ssl_mode = os.getenv("PGSSLMODE", "require")
             return f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_database}?sslmode={ssl_mode}"
-        
-        # Fall back to DATABASE_URL or SQLite
-        return os.getenv("DATABASE_URL", "sqlite:///./portfolio.db")
+
+        # Fall back to SQLite
+        return "sqlite:///./portfolio.db"
     
     @property
     def DB_ECHO(self) -> bool:
